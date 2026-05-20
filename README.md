@@ -1,0 +1,229 @@
+# Haggis AI
+
+A dependency-light Python playground for building strong computer players for
+[Haggis](https://thespiel.net/files/haggis.pdf).
+
+The project is intentionally split into small pieces:
+
+- a deterministic rules engine with no UI dependencies;
+- baseline, heuristic, search, and learned bots;
+- tournament/game/ladder evaluation tools;
+- self-play data export for ML experiments;
+- a dependency-free linear imitation policy trainer;
+- regression tests for rule behavior, legal moves, search, evaluation, and ML data.
+
+## Status
+
+Implemented today:
+
+- two-player Haggis deal, trick, scoring, bomb, wild, betting, and target-score game support;
+- optimized legal move generation checked against brute-force oracle tests on small hands;
+- invariant validation for card conservation and illegal state detection;
+- fixed-hand tournaments, official target-score games, and round-robin ladders;
+- JSON ladder metrics export;
+- self-play JSONL export with either perfect-information or player-observation records;
+- linear imitation-policy training with averaged perceptron and validation metrics;
+- an end-to-end experiment runner.
+
+## Quick start
+
+Run the test suite:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+Run a fixed-hand tournament:
+
+```bash
+python3 -m haggis.tournament --bot-a point-aware --bot-b bomb-control --hands 100 --seed 1 --output-json runs/tournament.json
+```
+
+Run an official target-score game:
+
+```bash
+python3 -m haggis.tournament \
+  --bot-a point-aware \
+  --bot-b bomb-control \
+  --target-score 250 \
+  --max-hands 100 \
+  --seed 1 \
+  --output-json runs/game.json
+```
+
+Run a round-robin ladder and save machine-readable metrics:
+
+```bash
+python3 -m haggis.ladder \
+  --bots random,greedy,point-aware,bomb-control \
+  --hands 20 \
+  --seed 1 \
+  --output-json runs/ladder.json
+```
+
+Run a lightweight benchmark:
+
+```bash
+python3 -m haggis.benchmark --bots random,greedy,point-aware,bomb-control --states 5 --seed 1 --output-json runs/benchmark.json
+```
+
+## Bot roster
+
+Available bot names for tournament/ladder commands:
+
+| Bot | Description |
+| --- | --- |
+| `random` | Uniform random legal move; always bets 0. |
+| `greedy` | Sheds the most cards, then prefers lower commitment. |
+| `point-aware` | Avoids unnecessary point-card/wild-card donation. |
+| `bomb-control` | Conservative heuristic that saves bombs for threats/endgames. |
+| `endgame-search` | Perfect-information minimax on small endgame states, heuristic fallback otherwise. |
+| `monte-carlo` | Root rollout search using perfect-information playouts. |
+| `information-set` | Rollout search that samples opponent-hand/haggis determinizations. |
+| `ucb-information-set` | UCB1 root allocation over information-set determinizations. |
+| `policy` | Loaded linear action-ranking policy model. |
+
+Tournaments ask bots for pre-play bets by default. Use `--no-betting` to disable
+this for compatibility experiments.
+
+Search bots accept budget flags in tournament and ladder commands:
+
+```bash
+--search-simulations 20
+--search-root-moves 8
+--search-rollout-turns 120
+```
+
+For example:
+
+```bash
+python3 -m haggis.tournament \
+  --bot-a ucb-information-set \
+  --bot-b bomb-control \
+  --hands 20 \
+  --search-simulations 16 \
+  --search-root-moves 6 \
+  --search-rollout-turns 100 \
+  --seed 1
+```
+
+## ML workflow
+
+### 1. Export and inspect self-play records
+
+```bash
+python3 -m haggis.self_play export \
+  --bot-a point-aware \
+  --bot-b bomb-control \
+  --hands 100 \
+  --seed 1 \
+  --observation-mode player \
+  --output data/self_play.jsonl
+
+python3 -m haggis.self_play summary \
+  --input data/self_play.jsonl \
+  --output-json data/self_play_summary.json
+```
+
+Observation modes:
+
+- `perfect`: records both exact hands and haggis point totals. Useful for debugging.
+- `player`: records the acting player's hand, hides opponent hand identities, and hides haggis point totals. This is the safer default for hidden-information policy learning.
+
+Self-play exports include bot pre-play bets by default; pass `--no-betting` to
+write zero-bet compatibility records.
+
+### 2. Train a linear imitation policy
+
+```bash
+python3 -m haggis.policy train \
+  --input data/self_play.jsonl \
+  --output models/linear_policy.json \
+  --epochs 5 \
+  --averaged \
+  --validation-fraction 0.2
+```
+
+The trainer is dependency-free. It uses deterministic feature extraction from the
+visible state/action summaries, supports averaged perceptron weights, and reports
+training plus validation accuracy.
+
+### 3. Evaluate the trained policy
+
+```bash
+python3 -m haggis.tournament \
+  --bot-a policy \
+  --bot-b greedy \
+  --policy-model models/linear_policy.json \
+  --hands 100 \
+  --seed 1
+```
+
+Or include it in a ladder:
+
+```bash
+python3 -m haggis.ladder \
+  --bots policy,greedy,point-aware,bomb-control \
+  --policy-model models/linear_policy.json \
+  --hands 20 \
+  --seed 1 \
+  --output-json runs/policy_ladder.json
+```
+
+### 4. Run the full experiment loop
+
+```bash
+python3 -m haggis.experiment \
+  --output-dir runs/demo \
+  --data-hands 20 \
+  --epochs 5 \
+  --averaged \
+  --validation-fraction 0.2 \
+  --eval-hands 10 \
+  --ladder-hands 5 \
+  --eval-opponents greedy,point-aware,bomb-control \
+  --observation-mode player \
+  --seed 1
+```
+
+This writes:
+
+- `self_play.jsonl` — training records;
+- `linear_policy.json` — trained model;
+- `metrics.json` — training and evaluation metrics;
+- `ladder.json` — optional policy-vs-baselines ladder ratings when `--ladder-hands` is set.
+
+## Architecture map
+
+- `haggis/cards.py` — ranks, suits, deck/deal helpers, point values.
+- `haggis/combinations.py` — sets, sequences, bombs, validation, comparison.
+- `haggis/engine.py` — game state, legal moves, trick resolution, scoring, invariants.
+- `haggis/bots.py` — baseline, heuristic, search, and policy bots.
+- `haggis/tournament.py` — fixed-hand tournaments and target-score games.
+- `haggis/ladder.py` — round-robin evaluation and JSON metrics.
+- `haggis/self_play.py` — JSONL decision-record export.
+- `haggis/policy.py` — linear action-ranking policy training/loading.
+- `haggis/experiment.py` — end-to-end data/train/evaluate runner.
+- `tests/` — behavior, oracle, CLI, evaluation, and ML regression tests.
+
+## Testing notes
+
+The full suite is intentionally broad and may take around 1–2 minutes because it
+runs self-play, experiment, and search regression checks:
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+The legal move generator is protected by brute-force oracle tests for curated and
+seeded small hands, including bombs, wilds, and sequences.
+
+## Roadmap
+
+Good next steps:
+
+1. Add stronger policy/value features and compare experiments via ladder JSON.
+2. Train larger averaged policies from `player` observation self-play.
+3. Replace root-only information-set search with a deeper ISMCTS tree.
+4. Add value-guided rollout/search using the trained policy model.
+5. Profile legal move/search hotspots and optimize once strength experiments need scale.

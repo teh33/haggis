@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local imp/mana run artifacts
+.imp/runs/
+
+# Generated experiment artifacts
+data/
+models/
+runs/
+*.jsonl

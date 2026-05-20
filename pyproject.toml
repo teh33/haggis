@@ -1,0 +1,8 @@
+[project]
+name = "haggis-ai"
+version = "0.1.0"
+description = "Rules engine and AI scaffold for Haggis"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
