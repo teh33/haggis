@@ -9,7 +9,9 @@ from haggis import Card, HaggisState, Move, PolicyBot, Rank, Suit, validate_comb
 from haggis.bots import PointAwareBot
 from haggis.policy import (
     LinearPolicy,
+    LinearValueModel,
     evaluate_policy_accuracy,
+    evaluate_value_mae,
     features_from_record_action,
     features_from_state_action,
     split_train_validation,
@@ -17,6 +19,9 @@ from haggis.policy import (
     inspect_policy,
     main,
     train_policy_from_jsonl,
+    train_value_model_from_jsonl,
+    value_features_from_record,
+    value_target_from_record,
 )
 from haggis.self_play import export_self_play_jsonl, generate_self_play_records
 from haggis.tournament import BOT_TYPES, run_match
@@ -176,6 +181,73 @@ class PolicyTrainingTests(unittest.TestCase):
         self.assertLessEqual(result.train_accuracy, 1.0)
         self.assertGreaterEqual(result.validation_accuracy, 0.0)
         self.assertLessEqual(result.validation_accuracy, 1.0)
+
+    def test_value_targets_are_extracted_from_outcome(self):
+        record = {
+            "outcome": {"actor_won": True, "actor_score_margin": 37},
+            "selected_action_index": 0,
+            "legal_actions": [],
+        }
+
+        self.assertEqual(value_target_from_record(record, target="actor_win"), 1.0)
+        self.assertEqual(value_target_from_record(record, target="actor_score_margin_normalized"), 0.37)
+
+    def test_train_value_model_saves_loads_and_reports_mae(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_path = Path(directory) / "records.jsonl"
+            model_path = Path(directory) / "value_model.json"
+            export_self_play_jsonl(data_path, bot_a="point-aware", bot_b="bomb-control", hands=4, seed=14)
+
+            model, result = train_value_model_from_jsonl(data_path, epochs=2, validation_fraction=0.25, target="actor_win")
+            model.save(model_path)
+            loaded = LinearValueModel.load(model_path)
+            records = generate_self_play_records(bot_a="point-aware", bot_b="bomb-control", hands=4, seed=14)
+            mae = evaluate_value_mae(loaded, records, target="actor_win")
+
+        self.assertEqual(loaded.target, "actor_win")
+        self.assertGreater(result.examples, 0)
+        self.assertEqual(result.updates, result.examples)
+        self.assertGreater(len(loaded.weights), 0)
+        self.assertGreaterEqual(mae, 0.0)
+        self.assertIsNotNone(result.validation_mean_absolute_error)
+
+    def test_value_features_use_selected_action_features(self):
+        records = generate_self_play_records(bot_a="point-aware", bot_b="bomb-control", hands=1, seed=15)
+        record = records[0]
+
+        features = value_features_from_record(record)
+        selected = features_from_record_action(record, record["selected_action"])
+
+        self.assertEqual(features, selected)
+
+    def test_policy_cli_trains_value_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_path = Path(directory) / "records.jsonl"
+            model_path = Path(directory) / "value_model.json"
+            export_self_play_jsonl(data_path, bot_a="point-aware", bot_b="bomb-control", hands=4, seed=16)
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "train-value",
+                        "--input",
+                        str(data_path),
+                        "--output",
+                        str(model_path),
+                        "--epochs",
+                        "2",
+                        "--validation-fraction",
+                        "0.25",
+                        "--target",
+                        "actor_win",
+                    ]
+                )
+            loaded = LinearValueModel.load(model_path)
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Trained linear value model", stdout.getvalue())
+        self.assertGreater(len(loaded.weights), 0)
 
     def test_live_policy_scoring_uses_ordered_action_index_features(self):
         state = HaggisState(hands=((c(7), c(8), c(9)), (c(3),)), current_player=0)

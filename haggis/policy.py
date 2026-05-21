@@ -28,6 +28,60 @@ class TrainingResult:
     validation_accuracy: float | None = None
 
 
+@dataclass(frozen=True)
+class ValueTrainingResult:
+    examples: int
+    epochs: int
+    updates: int
+    mean_absolute_error: float
+    train_examples: int = 0
+    validation_examples: int = 0
+    train_mean_absolute_error: float = 0.0
+    validation_mean_absolute_error: float | None = None
+
+
+@dataclass
+class LinearValueModel:
+    weights: dict[str, float] = field(default_factory=dict)
+    feature_version: int = FEATURE_VERSION
+    target: str = "actor_score_margin_normalized"
+
+    def predict(self, features: FeatureVector) -> float:
+        return sum(self.weights.get(name, 0.0) * value for name, value in features.items())
+
+    def update(self, features: FeatureVector, target: float, learning_rate: float = 0.01) -> float:
+        prediction = self.predict(features)
+        error = target - prediction
+        for name, value in features.items():
+            self.weights[name] = self.weights.get(name, 0.0) + learning_rate * error * value
+        self._drop_zero_weights()
+        return abs(error)
+
+    def save(self, path: str | Path) -> None:
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "model_type": "linear_value_model",
+            "feature_version": self.feature_version,
+            "target": self.target,
+            "weights": dict(sorted(self.weights.items())),
+        }
+        output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: str | Path) -> "LinearValueModel":
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if payload.get("model_type") != "linear_value_model":
+            raise ValueError("not a Haggis linear value model")
+        if payload.get("feature_version") != FEATURE_VERSION:
+            raise ValueError(f"unsupported feature version: {payload.get('feature_version')!r}")
+        weights = {str(name): float(value) for name, value in payload.get("weights", {}).items()}
+        return cls(weights=weights, feature_version=FEATURE_VERSION, target=str(payload.get("target", "actor_score_margin_normalized")))
+
+    def _drop_zero_weights(self) -> None:
+        self.weights = {name: value for name, value in self.weights.items() if abs(value) > 1e-12}
+
+
 @dataclass
 class LinearPolicy:
     weights: dict[str, float] = field(default_factory=dict)
@@ -167,6 +221,69 @@ def train_policy_from_jsonl(
         train_accuracy=best_accuracy,
         validation_accuracy=validation_accuracy,
     )
+
+
+def train_value_model_from_jsonl(
+    input_path: str | Path,
+    *,
+    epochs: int = 5,
+    learning_rate: float = 0.001,
+    validation_fraction: float = 0.0,
+    target: str = "actor_score_margin_normalized",
+) -> tuple[LinearValueModel, ValueTrainingResult]:
+    records = tuple(load_records_jsonl(input_path))
+    if not records:
+        raise ValueError("training data is empty")
+    if epochs < 1:
+        raise ValueError("epochs must be at least 1")
+    train_records, validation_records = split_train_validation(records, validation_fraction=validation_fraction)
+
+    model = LinearValueModel(target=target)
+    examples = 0
+    updates = 0
+    for _epoch in range(epochs):
+        for record in train_records:
+            features = value_features_from_record(record)
+            model.update(features, value_target_from_record(record, target=target), learning_rate=learning_rate)
+            examples += 1
+            updates += 1
+
+    train_mae = evaluate_value_mae(model, train_records, target=target)
+    validation_mae = evaluate_value_mae(model, validation_records, target=target) if validation_records else None
+    return model, ValueTrainingResult(
+        examples=examples,
+        epochs=epochs,
+        updates=updates,
+        mean_absolute_error=train_mae,
+        train_examples=len(train_records),
+        validation_examples=len(validation_records),
+        train_mean_absolute_error=train_mae,
+        validation_mean_absolute_error=validation_mae,
+    )
+
+
+def evaluate_value_mae(model: LinearValueModel, records: Iterable[JsonObject], *, target: str = "actor_score_margin_normalized") -> float:
+    total_error = 0.0
+    count = 0
+    for record in records:
+        total_error += abs(value_target_from_record(record, target=target) - model.predict(value_features_from_record(record)))
+        count += 1
+    return total_error / count if count else 0.0
+
+
+def value_target_from_record(record: JsonObject, *, target: str = "actor_score_margin_normalized") -> float:
+    outcome = record.get("outcome", {})
+    if target == "actor_win":
+        return 1.0 if outcome.get("actor_won", False) else -1.0
+    if target == "actor_score_margin_normalized":
+        return float(outcome.get("actor_score_margin", 0.0)) / 100.0
+    raise ValueError(f"unsupported value target: {target}")
+
+
+def value_features_from_record(record: JsonObject) -> FeatureVector:
+    selected_index = int(record["selected_action_index"])
+    action = record["legal_actions"][selected_index]
+    return features_from_record_action(record, action)
 
 
 def split_train_validation(
@@ -520,6 +637,13 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--only-winners", action="store_true", help="Train only from decisions made by the hand winner")
     train.add_argument("--averaged", action="store_true", help="Use averaged perceptron weights")
     train.add_argument("--validation-fraction", type=float, default=0.0, help="Held-out fraction from the end of the JSONL records")
+    train_value = subparsers.add_parser("train-value", help="Train a linear value model from self-play JSONL")
+    train_value.add_argument("--input", required=True, help="Self-play JSONL input path")
+    train_value.add_argument("--output", required=True, help="Value model JSON output path")
+    train_value.add_argument("--epochs", type=int, default=5)
+    train_value.add_argument("--learning-rate", type=float, default=0.001)
+    train_value.add_argument("--validation-fraction", type=float, default=0.0, help="Held-out fraction from the end of the JSONL records")
+    train_value.add_argument("--target", choices=("actor_score_margin_normalized", "actor_win"), default="actor_score_margin_normalized")
     inspect = subparsers.add_parser("inspect", help="Inspect top linear policy weights")
     inspect.add_argument("--model", required=True, help="Model JSON path")
     inspect.add_argument("--top", type=int, default=10, help="Number of positive/negative weights to show")
@@ -545,6 +669,24 @@ def main(argv: list[str] | None = None) -> int:
             f"averaged={result.averaged}; "
             f"accuracy={result.accuracy:.3f}; "
             f"validation_accuracy={result.validation_accuracy if result.validation_accuracy is not None else 'n/a'}; "
+            f"wrote {args.output}"
+        )
+        return 0
+    if args.command == "train-value":
+        value_model, result = train_value_model_from_jsonl(
+            args.input,
+            epochs=args.epochs,
+            learning_rate=args.learning_rate,
+            validation_fraction=args.validation_fraction,
+            target=args.target,
+        )
+        value_model.save(args.output)
+        print(
+            f"Trained linear value model on {result.examples} examples "
+            f"for {result.epochs} epochs with {result.updates} updates; "
+            f"target={args.target}; "
+            f"mae={result.mean_absolute_error:.3f}; "
+            f"validation_mae={result.validation_mean_absolute_error if result.validation_mean_absolute_error is not None else 'n/a'}; "
             f"wrote {args.output}"
         )
         return 0

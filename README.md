@@ -317,6 +317,22 @@ The trainer is dependency-free. It uses deterministic feature extraction from th
 visible state/action summaries, supports averaged perceptron weights, and reports
 training plus validation accuracy.
 
+You can also train a value model from the same records. It predicts final outcome
+from the selected state-action features, starting with normalized score margin or
+win/loss targets:
+
+```bash
+python3 -m haggis.policy train-value \
+  --input data/search_improved.jsonl \
+  --output models/value_model.json \
+  --epochs 5 \
+  --validation-fraction 0.2 \
+  --target actor_score_margin_normalized
+```
+
+The value model is not wired into search yet; it is the training artifact needed
+for future value-guided rollouts.
+
 ### 3. Evaluate the trained policy
 
 ```bash
