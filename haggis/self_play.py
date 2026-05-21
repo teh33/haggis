@@ -190,11 +190,13 @@ def _play_hand_records(
     finalized = []
     for record in pending:
         actor = record["acting_player"]
+        actor_score_margin = score.points[actor] - score.points[1 - actor]
         record = dict(record)
         record["outcome"] = {
             **outcome,
             "actor_won": actor == score.winner,
-            "score_margin_for_actor": score.points[actor] - score.points[1 - actor],
+            "actor_score_margin": actor_score_margin,
+            "score_margin_for_actor": actor_score_margin,
         }
         finalized.append(record)
 

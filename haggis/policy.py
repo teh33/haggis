@@ -45,14 +45,27 @@ class LinearValueModel:
     weights: dict[str, float] = field(default_factory=dict)
     feature_version: int = FEATURE_VERSION
     target: str = "actor_score_margin_normalized"
+    feature_scale: str = "bounded_v1"
 
     def predict(self, features: FeatureVector) -> float:
-        return sum(self.weights.get(name, 0.0) * value for name, value in features.items())
+        bounded = normalize_value_features(features)
+        return sum(self.weights.get(name, 0.0) * value for name, value in bounded.items())
 
-    def update(self, features: FeatureVector, target: float, learning_rate: float = 0.01) -> float:
-        prediction = self.predict(features)
-        error = target - prediction
-        for name, value in features.items():
+    def update(
+        self,
+        features: FeatureVector,
+        target: float,
+        learning_rate: float = 0.0001,
+        l2: float = 0.0001,
+    ) -> float:
+        bounded = normalize_value_features(features)
+        bounded_target = clamp_value_target(target)
+        prediction = self.predict(bounded)
+        error = bounded_target - prediction
+        shrink = max(0.0, 1.0 - learning_rate * l2)
+        for name in list(self.weights):
+            self.weights[name] *= shrink
+        for name, value in bounded.items():
             self.weights[name] = self.weights.get(name, 0.0) + learning_rate * error * value
         self._drop_zero_weights()
         return abs(error)
@@ -63,6 +76,7 @@ class LinearValueModel:
         payload = {
             "model_type": "linear_value_model",
             "feature_version": self.feature_version,
+            "feature_scale": self.feature_scale,
             "target": self.target,
             "weights": dict(sorted(self.weights.items())),
         }
@@ -76,7 +90,12 @@ class LinearValueModel:
         if payload.get("feature_version") != FEATURE_VERSION:
             raise ValueError(f"unsupported feature version: {payload.get('feature_version')!r}")
         weights = {str(name): float(value) for name, value in payload.get("weights", {}).items()}
-        return cls(weights=weights, feature_version=FEATURE_VERSION, target=str(payload.get("target", "actor_score_margin_normalized")))
+        return cls(
+            weights=weights,
+            feature_version=FEATURE_VERSION,
+            target=str(payload.get("target", "actor_score_margin_normalized")),
+            feature_scale=str(payload.get("feature_scale", "bounded_v1")),
+        )
 
     def _drop_zero_weights(self) -> None:
         self.weights = {name: value for name, value in self.weights.items() if abs(value) > 1e-12}
@@ -227,9 +246,10 @@ def train_value_model_from_jsonl(
     input_path: str | Path,
     *,
     epochs: int = 5,
-    learning_rate: float = 0.001,
+    learning_rate: float = 0.0001,
     validation_fraction: float = 0.0,
     target: str = "actor_score_margin_normalized",
+    l2: float = 0.0001,
 ) -> tuple[LinearValueModel, ValueTrainingResult]:
     records = tuple(load_records_jsonl(input_path))
     if not records:
@@ -244,7 +264,12 @@ def train_value_model_from_jsonl(
     for _epoch in range(epochs):
         for record in train_records:
             features = value_features_from_record(record)
-            model.update(features, value_target_from_record(record, target=target), learning_rate=learning_rate)
+            model.update(
+                features,
+                value_target_from_record(record, target=target),
+                learning_rate=learning_rate,
+                l2=l2,
+            )
             examples += 1
             updates += 1
 
@@ -266,7 +291,7 @@ def evaluate_value_mae(model: LinearValueModel, records: Iterable[JsonObject], *
     total_error = 0.0
     count = 0
     for record in records:
-        total_error += abs(value_target_from_record(record, target=target) - model.predict(value_features_from_record(record)))
+        total_error += abs(clamp_value_target(value_target_from_record(record, target=target)) - model.predict(value_features_from_record(record)))
         count += 1
     return total_error / count if count else 0.0
 
@@ -276,7 +301,8 @@ def value_target_from_record(record: JsonObject, *, target: str = "actor_score_m
     if target == "actor_win":
         return 1.0 if outcome.get("actor_won", False) else -1.0
     if target == "actor_score_margin_normalized":
-        return float(outcome.get("actor_score_margin", 0.0)) / 100.0
+        score_margin = outcome.get("actor_score_margin", outcome.get("score_margin_for_actor", 0.0))
+        return float(score_margin) / 100.0
     raise ValueError(f"unsupported value target: {target}")
 
 
@@ -285,6 +311,38 @@ def value_features_from_record(record: JsonObject) -> FeatureVector:
     action = record["legal_actions"][selected_index]
     return features_from_record_action(record, action)
 
+
+def clamp_value_target(value: float) -> float:
+    return max(-1.0, min(1.0, float(value)))
+
+
+def normalize_value_features(features: FeatureVector) -> FeatureVector:
+    return {name: _bounded_feature_value(name, value) for name, value in features.items()}
+
+
+def _bounded_feature_value(name: str, value: float) -> float:
+    value = float(value)
+    if name == "bias" or name.endswith(".pass") or name.endswith(".none") or ".type." in name:
+        return value
+    if name.endswith(".sheds_hand_fraction") or name.endswith(".point_fraction"):
+        return max(0.0, min(1.0, value))
+    if name.endswith(".rank"):
+        return max(0.0, min(1.0, value / 13.0))
+    if name.endswith(".bomb_rank"):
+        return max(0.0, min(1.0, value / 6.0))
+    if name.endswith(".sequence_width"):
+        return max(0.0, min(1.0, value / 4.0))
+    if name.endswith(".sequence_length"):
+        return max(0.0, min(1.0, value / 9.0))
+    if name.endswith(".index") or name.endswith(".neg_index"):
+        return max(-1.0, min(1.0, value / 100.0))
+    if name.endswith(".card_count") or name.endswith(".remaining_cards") or name.endswith(".actor_cards") or name.endswith(".opponent_cards") or name.endswith(".card_delta"):
+        return max(-1.0, min(1.0, value / 17.0))
+    if name.endswith(".bet") or name.endswith(".bet_delta"):
+        return max(-1.0, min(1.0, value / 30.0))
+    if "points" in name or "point_" in name:
+        return max(-1.0, min(1.0, value / 100.0))
+    return max(-1.0, min(1.0, value))
 
 def split_train_validation(
     records: tuple[JsonObject, ...],
@@ -641,7 +699,8 @@ def build_parser() -> argparse.ArgumentParser:
     train_value.add_argument("--input", required=True, help="Self-play JSONL input path")
     train_value.add_argument("--output", required=True, help="Value model JSON output path")
     train_value.add_argument("--epochs", type=int, default=5)
-    train_value.add_argument("--learning-rate", type=float, default=0.001)
+    train_value.add_argument("--learning-rate", type=float, default=0.0001)
+    train_value.add_argument("--l2", type=float, default=0.0001, help="L2 regularization strength")
     train_value.add_argument("--validation-fraction", type=float, default=0.0, help="Held-out fraction from the end of the JSONL records")
     train_value.add_argument("--target", choices=("actor_score_margin_normalized", "actor_win"), default="actor_score_margin_normalized")
     inspect = subparsers.add_parser("inspect", help="Inspect top linear policy weights")
@@ -679,6 +738,7 @@ def main(argv: list[str] | None = None) -> int:
             learning_rate=args.learning_rate,
             validation_fraction=args.validation_fraction,
             target=args.target,
+            l2=args.l2,
         )
         value_model.save(args.output)
         print(

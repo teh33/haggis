@@ -10,6 +10,7 @@ from haggis.bots import PointAwareBot
 from haggis.policy import (
     LinearPolicy,
     LinearValueModel,
+    clamp_value_target,
     evaluate_policy_accuracy,
     evaluate_value_mae,
     features_from_record_action,
@@ -18,6 +19,7 @@ from haggis.policy import (
     format_policy_inspection,
     inspect_policy,
     main,
+    normalize_value_features,
     train_policy_from_jsonl,
     train_value_model_from_jsonl,
     value_features_from_record,
@@ -192,6 +194,33 @@ class PolicyTrainingTests(unittest.TestCase):
         self.assertEqual(value_target_from_record(record, target="actor_win"), 1.0)
         self.assertEqual(value_target_from_record(record, target="actor_score_margin_normalized"), 0.37)
 
+    def test_score_margin_target_accepts_legacy_and_current_outcome_keys(self):
+        self.assertEqual(value_target_from_record({"outcome": {"score_margin_for_actor": 37}}, target="actor_score_margin_normalized"), 0.37)
+        self.assertEqual(value_target_from_record({"outcome": {"actor_score_margin": -42}}, target="actor_score_margin_normalized"), -0.42)
+
+    def test_value_features_are_bounded_for_stable_training(self):
+        features = {
+            "bias": 1.0,
+            "action.index": 250.0,
+            "action.neg_index": -250.0,
+            "action.card_count": 40.0,
+            "state.bet_delta": -60.0,
+            "state.trick_points": 500.0,
+            "action.sheds_hand_fraction": 2.5,
+        }
+
+        normalized = normalize_value_features(features)
+
+        self.assertEqual(normalized["bias"], 1.0)
+        self.assertEqual(normalized["action.index"], 1.0)
+        self.assertEqual(normalized["action.neg_index"], -1.0)
+        self.assertEqual(normalized["action.card_count"], 1.0)
+        self.assertEqual(normalized["state.bet_delta"], -1.0)
+        self.assertEqual(normalized["state.trick_points"], 1.0)
+        self.assertEqual(normalized["action.sheds_hand_fraction"], 1.0)
+        self.assertEqual(clamp_value_target(5.0), 1.0)
+        self.assertEqual(clamp_value_target(-5.0), -1.0)
+
     def test_train_value_model_saves_loads_and_reports_mae(self):
         with tempfile.TemporaryDirectory() as directory:
             data_path = Path(directory) / "records.jsonl"
@@ -205,6 +234,7 @@ class PolicyTrainingTests(unittest.TestCase):
             mae = evaluate_value_mae(loaded, records, target="actor_win")
 
         self.assertEqual(loaded.target, "actor_win")
+        self.assertEqual(loaded.feature_scale, "bounded_v1")
         self.assertGreater(result.examples, 0)
         self.assertEqual(result.updates, result.examples)
         self.assertGreater(len(loaded.weights), 0)
@@ -219,6 +249,59 @@ class PolicyTrainingTests(unittest.TestCase):
         selected = features_from_record_action(record, record["selected_action"])
 
         self.assertEqual(features, selected)
+
+    def test_value_training_stays_finite_on_search_improved_scale_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_path = Path(directory) / "records.jsonl"
+            rows = []
+            for index in range(40):
+                rows.append(
+                    {
+                        "acting_player": 0,
+                        "state": {
+                            "hands": [["K♣*", "Q♣*", "J♣*"], None],
+                            "hand_sizes": [17, 17],
+                            "captured_points": [300 + index, 0],
+                            "trick_points": 250 + index,
+                            "haggis_points": 80,
+                            "last_combination": None,
+                            "bets": [30, 0],
+                            "has_played": [True, False],
+                        },
+                        "legal_actions": [
+                            {
+                                "index": 120 + index,
+                                "is_pass": False,
+                                "cards": ["K♣*", "Q♣*", "J♣*"],
+                                "point_risk": 500 + index,
+                                "combination": {
+                                    "type": "set",
+                                    "rank": 13,
+                                    "card_count": 3,
+                                    "bomb_rank": 0,
+                                    "sequence_width": 0,
+                                    "sequence_length": 0,
+                                    "is_bomb": False,
+                                },
+                            }
+                        ],
+                        "selected_action_index": 0,
+                        "outcome": {"actor_won": index % 2 == 0, "actor_score_margin": 1000 if index % 2 == 0 else -1000},
+                    }
+                )
+            data_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+            model, result = train_value_model_from_jsonl(data_path, epochs=3, learning_rate=0.0001, target="actor_score_margin_normalized")
+
+        self.assertLess(result.mean_absolute_error, 10.0)
+        self.assertTrue(all(abs(weight) < 10.0 for weight in model.weights.values()))
+
+    def test_self_play_records_include_current_and_legacy_actor_margin_keys(self):
+        records = generate_self_play_records(bot_a="point-aware", bot_b="bomb-control", hands=1, seed=17)
+        record = records[0]
+
+        self.assertIn("actor_score_margin", record["outcome"])
+        self.assertEqual(record["outcome"]["actor_score_margin"], record["outcome"]["score_margin_for_actor"])
 
     def test_policy_cli_trains_value_model(self):
         with tempfile.TemporaryDirectory() as directory:
