@@ -4,9 +4,20 @@ from pathlib import Path
 from random import Random
 from math import log, sqrt
 
-from .cards import Card
 from .combinations import CombinationType
 from .engine import HaggisState, Move
+from .search import (
+    bet_amount_for_hand,
+    is_bomb,
+    low_bomb_key,
+    low_commitment_key,
+    point_aware_key,
+    root_candidates,
+    rollout_value,
+    sample_determinization,
+    search_tiebreak_key,
+    static_value,
+)
 
 
 class RandomBot:
@@ -14,7 +25,7 @@ class RandomBot:
         self.rng = Random(seed)
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=1)
+        return bet_amount_for_hand(state.hands[player], aggression=1)
 
     def choose_move(self, state: HaggisState) -> Move:
         moves = state.legal_moves()
@@ -27,7 +38,7 @@ class GreedySheddingBot:
     """Simple baseline: shed the most cards, then the lowest-ranking combo."""
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=0)
+        return bet_amount_for_hand(state.hands[player], aggression=0)
 
     def choose_move(self, state: HaggisState) -> Move:
         moves = state.legal_moves()
@@ -49,7 +60,7 @@ class PointAwareBot:
     """Baseline that sheds cards while avoiding unnecessary point-card donation."""
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=1)
+        return bet_amount_for_hand(state.hands[player], aggression=1)
 
     def choose_move(self, state: HaggisState) -> Move:
         moves = state.legal_moves()
@@ -58,14 +69,14 @@ class PointAwareBot:
             return Move.pass_turn()
 
         hand_size = len(state.hands[state.current_player])
-        return min(playable, key=lambda move: _point_aware_key(move, hand_size))
+        return min(playable, key=lambda move: point_aware_key(move, hand_size))
 
 
 class BombControlBot:
     """Conservative bomb baseline that saves bombs for threats and endgames."""
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=2)
+        return bet_amount_for_hand(state.hands[player], aggression=2)
 
     def choose_move(self, state: HaggisState) -> Move:
         moves = state.legal_moves()
@@ -77,25 +88,25 @@ class BombControlBot:
         opponent = 1 - player
         hand_size = len(state.hands[player])
         opponent_cards = len(state.hands[opponent])
-        bombs = [move for move in playable if _is_bomb(move)]
-        non_bombs = [move for move in playable if not _is_bomb(move)]
+        bombs = [move for move in playable if is_bomb(move)]
+        non_bombs = [move for move in playable if not is_bomb(move)]
 
         winning_moves = [move for move in playable if len(move.cards) == hand_size]
         if winning_moves:
-            return min(winning_moves, key=_low_commitment_key)
+            return min(winning_moves, key=low_commitment_key)
 
         if state.last_combination and state.last_combination.type == CombinationType.BOMB:
             if bombs:
-                return min(bombs, key=_low_bomb_key)
+                return min(bombs, key=low_bomb_key)
             return Move.pass_turn()
 
         if non_bombs:
-            return min(non_bombs, key=lambda move: _point_aware_key(move, hand_size))
+            return min(non_bombs, key=lambda move: point_aware_key(move, hand_size))
 
         if state.last_combination is not None and opponent_cards > 5:
             return Move.pass_turn()
 
-        return min(bombs, key=_low_bomb_key) if bombs else Move.pass_turn()
+        return min(bombs, key=low_bomb_key) if bombs else Move.pass_turn()
 
 
 class UCBInformationSetBot:
@@ -124,7 +135,7 @@ class UCBInformationSetBot:
         self.max_root_moves = max_root_moves
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=2)
+        return bet_amount_for_hand(state.hands[player], aggression=2)
 
     def choose_move(self, state: HaggisState) -> Move:
         legal_moves = state.legal_moves()
@@ -135,11 +146,11 @@ class UCBInformationSetBot:
         playable = [move for move in legal_moves if not move.is_pass]
         immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
         if immediate_wins:
-            return min(immediate_wins, key=_low_commitment_key)
+            return min(immediate_wins, key=low_commitment_key)
 
         root_moves, visits, values = self.search_root(state)
         scored = [
-            (values[index] / visits[index], visits[index], _search_tiebreak_key(move), move)
+            (values[index] / visits[index], visits[index], search_tiebreak_key(move), move)
             for index, move in enumerate(root_moves)
         ]
         return max(scored, key=lambda item: (item[0], item[1], item[2]))[3]
@@ -150,16 +161,16 @@ class UCBInformationSetBot:
             raise ValueError("no legal moves available")
 
         root_player = state.current_player
-        root_moves = _root_candidates(state, legal_moves, min(self.max_root_moves, self.simulations))
+        root_moves = root_candidates(state, legal_moves, min(self.max_root_moves, self.simulations))
         visits = [0 for _ in root_moves]
         values = [0.0 for _ in root_moves]
 
         for simulation_index in range(max(self.simulations, len(root_moves))):
             move_index = self._select_root_move(visits, values, simulation_index + 1)
             move = root_moves[move_index]
-            determinized = self.sample_determinization(state)
+            determinized = sample_determinization(state, self.rng)
             next_state = determinized.apply_move(move)
-            value = _rollout_value(next_state, root_player, self.rng, self.max_rollout_turns)
+            value = rollout_value(next_state, root_player, self.rng, self.max_rollout_turns)
             visits[move_index] += 1
             values[move_index] += value
 
@@ -179,28 +190,7 @@ class UCBInformationSetBot:
         return max(scores)[2]
 
     def sample_determinization(self, state: HaggisState) -> HaggisState:
-        player = state.current_player
-        opponent = 1 - player
-        unknown_pool = list(sorted((*state.hands[opponent], *state.haggis)))
-        self.rng.shuffle(unknown_pool)
-
-        opponent_count = len(state.hands[opponent])
-        sampled_opponent = tuple(sorted(unknown_pool[:opponent_count]))
-        sampled_haggis = tuple(sorted(unknown_pool[opponent_count:]))
-        hands = list(state.hands)
-        hands[opponent] = sampled_opponent
-        return HaggisState(
-            hands=tuple(hands),
-            haggis=sampled_haggis,
-            captured=state.captured,
-            current_player=state.current_player,
-            last_combination=state.last_combination,
-            last_player=state.last_player,
-            trick_cards=state.trick_cards,
-            bets=state.bets,
-            has_played=state.has_played,
-            hand_winner=state.hand_winner,
-        )
+        return sample_determinization(state, self.rng)
 
 
 class TreeInformationSetBot:
@@ -243,7 +233,7 @@ class TreeInformationSetBot:
             self.policy = LinearPolicy.load(model_path)
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=2)
+        return bet_amount_for_hand(state.hands[player], aggression=2)
 
     def choose_move(self, state: HaggisState) -> Move:
         legal_moves = state.legal_moves()
@@ -254,11 +244,11 @@ class TreeInformationSetBot:
         playable = [move for move in legal_moves if not move.is_pass]
         immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
         if immediate_wins:
-            return min(immediate_wins, key=_low_commitment_key)
+            return min(immediate_wins, key=low_commitment_key)
 
         root_moves, visits, values = self.search_root(state)
         scored = [
-            (values[index] / visits[index], visits[index], _search_tiebreak_key(move), move)
+            (values[index] / visits[index], visits[index], search_tiebreak_key(move), move)
             for index, move in enumerate(root_moves)
         ]
         return max(scored, key=lambda item: (item[0], item[1], item[2]))[3]
@@ -269,7 +259,7 @@ class TreeInformationSetBot:
             raise ValueError("no legal moves available")
 
         root_player = state.current_player
-        root_moves = _root_candidates(state, legal_moves, min(self.max_root_moves, self.simulations))
+        root_moves = root_candidates(state, legal_moves, min(self.max_root_moves, self.simulations))
         visits = [0 for _ in root_moves]
         values = [0.0 for _ in root_moves]
         children: list[_TreeSearchNode] = [_TreeSearchNode() for _ in root_moves]
@@ -290,11 +280,11 @@ class TreeInformationSetBot:
             score = state.score_hand().points
             return float(score[root_player] - score[1 - root_player])
         if depth <= 0:
-            return _rollout_value(state, root_player, self.rng, self.max_rollout_turns, rollout_policy=self.policy)
+            return rollout_value(state, root_player, self.rng, self.max_rollout_turns, rollout_policy=self.policy)
 
-        legal_moves = _root_candidates(state, state.legal_moves(), self.max_child_moves)
+        legal_moves = root_candidates(state, state.legal_moves(), self.max_child_moves)
         if not legal_moves:
-            return float(_static_value(state, root_player))
+            return float(static_value(state, root_player))
         for move in legal_moves:
             node.children.setdefault(move, _TreeSearchNode())
 
@@ -321,7 +311,7 @@ class TreeInformationSetBot:
             if not maximizing:
                 mean = -mean
             mean += self.exploration * sqrt(log(max(total_visits, 2)) / node.visits)
-        return (mean, _search_tiebreak_key(move))
+        return (mean, search_tiebreak_key(move))
 
     def _select_index(self, visits: list[int], values: list[float], total_visits: int) -> int:
         for index, visit_count in enumerate(visits):
@@ -371,7 +361,7 @@ class InformationSetRolloutBot:
         self.max_root_moves = max_root_moves
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=2)
+        return bet_amount_for_hand(state.hands[player], aggression=2)
 
     def choose_move(self, state: HaggisState) -> Move:
         legal_moves = state.legal_moves()
@@ -382,43 +372,22 @@ class InformationSetRolloutBot:
         playable = [move for move in legal_moves if not move.is_pass]
         immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
         if immediate_wins:
-            return min(immediate_wins, key=_low_commitment_key)
+            return min(immediate_wins, key=low_commitment_key)
 
-        root_moves = _root_candidates(state, legal_moves, self.max_root_moves)
+        root_moves = root_candidates(state, legal_moves, self.max_root_moves)
         scored: list[tuple[float, tuple[int, int, int, int, tuple[str, ...]], Move]] = []
         for move in root_moves:
             total = 0.0
             for _ in range(self.simulations_per_move):
-                determinized = self.sample_determinization(state)
+                determinized = sample_determinization(state, self.rng)
                 next_state = determinized.apply_move(move)
-                total += _rollout_value(next_state, player, self.rng, self.max_rollout_turns)
-            scored.append((total / self.simulations_per_move, _search_tiebreak_key(move), move))
+                total += rollout_value(next_state, player, self.rng, self.max_rollout_turns)
+            scored.append((total / self.simulations_per_move, search_tiebreak_key(move), move))
 
         return max(scored, key=lambda item: (item[0], item[1]))[2]
 
     def sample_determinization(self, state: HaggisState) -> HaggisState:
-        player = state.current_player
-        opponent = 1 - player
-        unknown_pool = list(sorted((*state.hands[opponent], *state.haggis)))
-        self.rng.shuffle(unknown_pool)
-
-        opponent_count = len(state.hands[opponent])
-        sampled_opponent = tuple(sorted(unknown_pool[:opponent_count]))
-        sampled_haggis = tuple(sorted(unknown_pool[opponent_count:]))
-        hands = list(state.hands)
-        hands[opponent] = sampled_opponent
-        return HaggisState(
-            hands=tuple(hands),
-            haggis=sampled_haggis,
-            captured=state.captured,
-            current_player=state.current_player,
-            last_combination=state.last_combination,
-            last_player=state.last_player,
-            trick_cards=state.trick_cards,
-            bets=state.bets,
-            has_played=state.has_played,
-            hand_winner=state.hand_winner,
-        )
+        return sample_determinization(state, self.rng)
 
 
 class MonteCarloRolloutBot:
@@ -447,7 +416,7 @@ class MonteCarloRolloutBot:
         self.max_root_moves = max_root_moves
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=1)
+        return bet_amount_for_hand(state.hands[player], aggression=1)
 
     def choose_move(self, state: HaggisState) -> Move:
         legal_moves = state.legal_moves()
@@ -458,16 +427,16 @@ class MonteCarloRolloutBot:
         playable = [move for move in legal_moves if not move.is_pass]
         immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
         if immediate_wins:
-            return min(immediate_wins, key=_low_commitment_key)
+            return min(immediate_wins, key=low_commitment_key)
 
-        root_moves = _root_candidates(state, legal_moves, self.max_root_moves)
+        root_moves = root_candidates(state, legal_moves, self.max_root_moves)
         scored: list[tuple[float, tuple[int, int, int, int, tuple[str, ...]], Move]] = []
         for move in root_moves:
             total = 0.0
             for _ in range(self.simulations_per_move):
                 next_state = state.apply_move(move)
-                total += _rollout_value(next_state, player, self.rng, self.max_rollout_turns)
-            scored.append((total / self.simulations_per_move, _search_tiebreak_key(move), move))
+                total += rollout_value(next_state, player, self.rng, self.max_rollout_turns)
+            scored.append((total / self.simulations_per_move, search_tiebreak_key(move), move))
 
         return max(scored, key=lambda item: (item[0], item[1]))[2]
 
@@ -503,7 +472,7 @@ class PolicyRolloutBot:
         self.max_root_moves = max_root_moves
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=2)
+        return bet_amount_for_hand(state.hands[player], aggression=2)
 
     def choose_move(self, state: HaggisState) -> Move:
         legal_moves = state.legal_moves()
@@ -514,20 +483,20 @@ class PolicyRolloutBot:
         playable = [move for move in legal_moves if not move.is_pass]
         immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
         if immediate_wins:
-            return min(immediate_wins, key=_low_commitment_key)
+            return min(immediate_wins, key=low_commitment_key)
 
-        root_moves = _root_candidates(state, legal_moves, self.max_root_moves)
+        root_moves = root_candidates(state, legal_moves, self.max_root_moves)
         scored: list[tuple[float, tuple[int, int, int, int, tuple[str, ...]], Move]] = []
         for move in root_moves:
             next_state = state.apply_move(move)
-            value = _rollout_value(
+            value = rollout_value(
                 next_state,
                 player,
                 self.rng,
                 self.max_rollout_turns,
                 rollout_policy=self.policy,
             )
-            scored.append((value, _search_tiebreak_key(move), move))
+            scored.append((value, search_tiebreak_key(move), move))
 
         return max(scored, key=lambda item: (item[0], item[1]))[2]
 
@@ -542,7 +511,7 @@ class PolicyBot:
         self.policy = LinearPolicy.load(self.model_path)
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=1)
+        return bet_amount_for_hand(state.hands[player], aggression=1)
 
     def choose_move(self, state: HaggisState) -> Move:
         moves = state.legal_moves()
@@ -564,7 +533,7 @@ class EndgameSearchBot:
         self.fallback = fallback if fallback is not None else BombControlBot()
 
     def choose_bet(self, state: HaggisState, player: int) -> int:
-        return _bet_amount_for_hand(state.hands[player], aggression=2)
+        return bet_amount_for_hand(state.hands[player], aggression=2)
 
     def choose_move(self, state: HaggisState) -> Move:
         moves = state.legal_moves()
@@ -590,7 +559,7 @@ class EndgameSearchBot:
                 return result
 
             if depth <= 0:
-                result = _static_value(position, root_player)
+                result = static_value(position, root_player)
                 cache[cache_key] = result
                 return result
 
@@ -600,172 +569,7 @@ class EndgameSearchBot:
             return result
 
         scored_moves = [
-            (value(state.apply_move(move), self.max_depth - 1), _search_tiebreak_key(move), move)
+            (value(state.apply_move(move), self.max_depth - 1), search_tiebreak_key(move), move)
             for move in moves
         ]
         return max(scored_moves, key=lambda item: (item[0], item[1]))[2]
-
-
-def _bet_amount_for_hand(hand: tuple[Card, ...], *, aggression: int) -> int:
-    """Simple deterministic pre-play betting heuristic."""
-    wild_count = sum(1 for card in hand if card.is_wild)
-    point_total = sum(card.points for card in hand)
-    high_cards = sum(1 for card in hand if int(card.rank) >= 8)
-    rank_counts: dict[int, int] = {}
-    for card in hand:
-        if not card.is_wild:
-            rank_counts[int(card.rank)] = rank_counts.get(int(card.rank), 0) + 1
-    max_same_rank = max(rank_counts.values(), default=0)
-
-    strength = point_total + wild_count * 6 + high_cards * 2 + max_same_rank * 3 + aggression * 3
-    if strength >= 42:
-        return 30
-    if strength >= 32:
-        return 15
-    return 0
-
-
-def sample_determinization(state: HaggisState, rng: Random) -> HaggisState:
-    player = state.current_player
-    opponent = 1 - player
-    unknown_pool = list(sorted((*state.hands[opponent], *state.haggis)))
-    rng.shuffle(unknown_pool)
-
-    opponent_count = len(state.hands[opponent])
-    sampled_opponent = tuple(sorted(unknown_pool[:opponent_count]))
-    sampled_haggis = tuple(sorted(unknown_pool[opponent_count:]))
-    hands = list(state.hands)
-    hands[opponent] = sampled_opponent
-    return HaggisState(
-        hands=tuple(hands),
-        haggis=sampled_haggis,
-        captured=state.captured,
-        current_player=state.current_player,
-        last_combination=state.last_combination,
-        last_player=state.last_player,
-        trick_cards=state.trick_cards,
-        bets=state.bets,
-        has_played=state.has_played,
-        hand_winner=state.hand_winner,
-    )
-
-
-def _root_candidates(state: HaggisState, legal_moves: tuple[Move, ...], max_root_moves: int) -> tuple[Move, ...]:
-    if len(legal_moves) <= max_root_moves:
-        return legal_moves
-
-    hand_size = len(state.hands[state.current_player])
-    playable = [move for move in legal_moves if not move.is_pass]
-    pass_moves = [move for move in legal_moves if move.is_pass]
-    ranked = sorted(playable, key=lambda move: _point_aware_key(move, hand_size))
-    candidates = ranked[:max_root_moves]
-    if pass_moves and len(candidates) < max_root_moves:
-        candidates.append(pass_moves[0])
-    return tuple(candidates)
-
-
-def _rollout_value(
-    state: HaggisState,
-    root_player: int,
-    rng: Random,
-    max_rollout_turns: int,
-    *,
-    rollout_policy: object | None = None,
-) -> float:
-    turns = 0
-    while state.hand_winner is None and turns < max_rollout_turns:
-        move = _choose_rollout_move(state, rng, rollout_policy=rollout_policy)
-        state = state.apply_move(move)
-        turns += 1
-
-    if state.hand_winner is not None:
-        score = state.score_hand().points
-        return float(score[root_player] - score[1 - root_player])
-    return float(_static_value(state, root_player))
-
-
-def _choose_rollout_move(state: HaggisState, rng: Random, *, rollout_policy: object | None = None) -> Move:
-    legal_moves = state.legal_moves()
-    playable = [move for move in legal_moves if not move.is_pass]
-    if not playable:
-        return Move.pass_turn()
-
-    hand_size = len(state.hands[state.current_player])
-    winning_moves = [move for move in playable if len(move.cards) == hand_size]
-    if winning_moves:
-        return min(winning_moves, key=_low_commitment_key)
-
-    if rollout_policy is not None:
-        return rollout_policy.choose_move(state, tuple(playable))  # type: ignore[attr-defined]
-
-    ranked = sorted(playable, key=lambda move: _point_aware_key(move, hand_size))
-    top_count = min(3, len(ranked))
-    return rng.choice(ranked[:top_count])
-
-
-def _is_bomb(move: Move) -> bool:
-    return bool(move.combination and move.combination.type == CombinationType.BOMB)
-
-
-def _static_value(state: HaggisState, player: int) -> int:
-    opponent = 1 - player
-    return (
-        (len(state.hands[opponent]) - len(state.hands[player])) * 10
-        + sum(card.points for card in state.captured[player])
-        - sum(card.points for card in state.captured[opponent])
-        + sum(card.points for card in state.hands[opponent])
-        - sum(card.points for card in state.hands[player])
-    )
-
-
-def _search_tiebreak_key(move: Move) -> tuple[int, int, int, int, tuple[str, ...]]:
-    if move.is_pass or move.combination is None:
-        return (-1, 0, 0, 0, ())
-    return (
-        len(move.cards),
-        -sum(card.points for card in move.cards),
-        -move.combination.bomb_rank,
-        -move.combination.rank,
-        tuple(card.short_name() for card in move.cards),
-    )
-
-
-def _point_aware_key(move: Move, hand_size: int) -> tuple[int, int, int, int, int, tuple[str, ...]]:
-    combination = move.combination
-    assert combination is not None
-    point_risk = sum(card.points for card in move.cards)
-    wild_count = sum(1 for card in move.cards if card.is_wild)
-    empties_hand = len(move.cards) == hand_size
-    bomb_penalty = 8 if combination.type == CombinationType.BOMB else 0
-
-    return (
-        0 if empties_hand else 1,
-        point_risk * 4 + wild_count * 3 + bomb_penalty,
-        -len(move.cards),
-        combination.bomb_rank,
-        combination.rank,
-        tuple(card.short_name() for card in move.cards),
-    )
-
-
-def _low_bomb_key(move: Move) -> tuple[int, int, int, tuple[str, ...]]:
-    combination = move.combination
-    assert combination is not None
-    return (
-        combination.bomb_rank,
-        sum(card.points for card in move.cards),
-        len(move.cards),
-        tuple(card.short_name() for card in move.cards),
-    )
-
-
-def _low_commitment_key(move: Move) -> tuple[int, int, int, int, tuple[str, ...]]:
-    combination = move.combination
-    assert combination is not None
-    return (
-        1 if combination.type == CombinationType.BOMB else 0,
-        sum(card.points for card in move.cards),
-        combination.bomb_rank,
-        combination.rank,
-        tuple(card.short_name() for card in move.cards),
-    )
