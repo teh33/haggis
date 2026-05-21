@@ -205,6 +205,7 @@ class HaggisState:
         points[winner] += len(self.hands[loser]) * 5
         points[0] += point_total(self.captured[0])
         points[1] += point_total(self.captured[1])
+        points[winner] += point_total(self.hands[loser]) + point_total(self.haggis)
 
         for player, bet in enumerate(self.bets):
             if bet:

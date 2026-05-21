@@ -143,20 +143,28 @@ python3 -m haggis.tournament \
 
 For stronger but slower play, use root `6` and rollout turns `80`.
 
+## Rules audit
+
+A source-backed implementation audit is available in
+[`docs/rules-audit.md`](docs/rules-audit.md). It compares the implementation
+against the published two-player rules and notes remaining confidence risks.
+
 ## Strategy guide
 
 Haggis is a climbing/shedding game: you win hands by going out, but the score is
 mostly decided by captured point cards, leftover-card penalties, and successful
 bets. Point cards are `3`, `5`, `7`, and `9` for 1 point each, `J` for 2, `Q`
 for 3, and `K` for 5. When a player goes out, they also score 5 points for each
-card left in the opponent's hand. Successful bets swing the combined wager: 15,
+card left in the opponent's hand, plus any point cards left in that opponent's
+hand and any point cards in the haggis. Successful bets swing the combined wager: 15,
 30, 45, or 60 points depending on whether one or both players bet and for how
 much. Good play balances tempo, point control, and bomb timing.
 
 ### Core priorities
 
 1. **Go out before the opponent.** Emptying your hand ends the hand and scores 5
-   points for every card left in the opponent's hand. Moves that shed multiple
+   points for every card left in the opponent's hand, plus any unplayed point
+   cards in the opponent hand and haggis. Moves that shed multiple
    cards are valuable when they do not donate too many captured points.
 2. **Do not donate points cheaply.** Threes, fives, sevens, nines, jacks, queens,
    and kings carry points. Avoid spending them into tricks you are unlikely to

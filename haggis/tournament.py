@@ -292,6 +292,8 @@ def run_game(
             search_rollout_turns=search_rollout_turns,
         ),
     )
+    # Per published two-player rules, the trailing player leads each next hand;
+    # if tied, the previous hand winner leads. `dealer` is the non-leader.
     cumulative = [0, 0]
     dealer = 1
     records: list[GameHandRecord] = []
@@ -323,7 +325,7 @@ def _next_dealer(cumulative_score: tuple[int, int], *, last_hand_winner: int) ->
         return 0
     if cumulative_score[1] > cumulative_score[0]:
         return 1
-    return last_hand_winner
+    return 1 - last_hand_winner
 
 
 def format_game_summary(result: GameResult) -> str:

@@ -155,10 +155,10 @@ class TournamentTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Bets placed: 0 - 0", output.getvalue())
 
-    def test_next_dealer_is_leader_or_last_winner_when_tied(self):
+    def test_next_dealer_is_score_leader_or_last_loser_when_tied(self):
         self.assertEqual(_next_dealer((40, 10), last_hand_winner=1), 0)
         self.assertEqual(_next_dealer((10, 40), last_hand_winner=0), 1)
-        self.assertEqual(_next_dealer((20, 20), last_hand_winner=1), 1)
+        self.assertEqual(_next_dealer((20, 20), last_hand_winner=1), 0)
 
     def test_run_game_accumulates_scores_and_dealer_progression(self):
         result = run_game("random", "greedy", target_score=80, seed=2, max_hands=10)
