@@ -1,0 +1,27 @@
+{
+  "averaged": true,
+  "feature_version": 2,
+  "model_type": "linear_action_ranker",
+  "weights": {
+    "action.bomb_rank": 113.75656697009103,
+    "action.card_count": 304.1106631989597,
+    "action.empties_hand": 55.65747724317295,
+    "action.index": -103.26749024707412,
+    "action.is_bomb": 3.1812743823146943,
+    "action.neg_index": 103.26749024707412,
+    "action.none": -116.677633289987,
+    "action.pass": -116.677633289987,
+    "action.point_fraction": -10.693825279881617,
+    "action.point_risk": -194.84148244473343,
+    "action.rank": 74.66072821846554,
+    "action.remaining_cards": -304.1106631989597,
+    "action.remaining_points": 194.84148244473343,
+    "action.sequence_length": -135.27516254876463,
+    "action.sequence_width": -86.28764629388817,
+    "action.sheds_hand_fraction": 42.66413494785228,
+    "action.type.bomb": 3.1812743823146943,
+    "action.type.sequence": -43.32626788036411,
+    "action.type.set": 156.82262678803642,
+    "action.wild_count": 35.90481144343303
+  }
+}

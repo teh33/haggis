@@ -11,6 +11,7 @@ htmlcov/
 
 # Generated experiment artifacts
 data/
-models/
+models/*
+!models/linear_policy.json
 runs/
 *.jsonl

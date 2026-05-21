@@ -89,14 +89,29 @@ Tournaments ask bots for pre-play bets by default. Use `--no-betting` to disable
 this for compatibility experiments.
 
 Search bots accept budget flags in tournament and ladder commands. `policy`,
-`policy-rollout`, and `tree-information-set` also use `--policy-model` to load a
-trained model:
+`policy-rollout`, and `tree-information-set` use `models/linear_policy.json` by
+default; pass `--policy-model` to load a different trained model:
 
 ```bash
 --search-simulations 20
 --search-root-moves 8
 --search-rollout-turns 120
+--policy-model models/linear_policy.json
 ```
+
+A fast strong default uses the included model with policy-guided rollouts:
+
+```bash
+python3 -m haggis.tournament \
+  --bot-a policy-rollout \
+  --bot-b point-aware \
+  --hands 20 \
+  --search-root-moves 4 \
+  --search-rollout-turns 40 \
+  --seed 1
+```
+
+For stronger but slower play, use root `6` and rollout turns `80`.
 
 For example:
 
@@ -236,5 +251,6 @@ seeded small hands, including bombs, wilds, and sequences.
 Remaining useful next steps:
 
 1. Mature the shallow `tree-information-set` prototype into fuller ISMCTS with deeper reusable child nodes.
-2. Add more evaluation runs against stronger/search opponents and tune policy-rollout/tree-search budgets.
-3. Continue profiling sequence generation if larger ladders need more throughput.
+2. Run larger ladders before treating `models/linear_policy.json` as a release-strength model.
+3. Add more evaluation runs against stronger/search opponents and tune policy-rollout/tree-search budgets.
+4. Continue profiling sequence generation if larger ladders need more throughput.
