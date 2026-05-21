@@ -23,7 +23,8 @@ Implemented today:
 - JSON ladder metrics export;
 - self-play JSONL export with either perfect-information or player-observation records;
 - linear imitation-policy training with averaged perceptron and validation metrics;
-- an end-to-end experiment runner.
+- an end-to-end experiment runner;
+- an interactive player-vs-CPU hand mode.
 
 ## Quick start
 
@@ -38,6 +39,15 @@ Run a fixed-hand tournament:
 ```bash
 python3 -m haggis.tournament --bot-a point-aware --bot-b bomb-control --hands 100 --seed 1 --output-json runs/tournament.json
 ```
+
+Run an interactive hand against the default CPU:
+
+```bash
+python3 -m haggis.play --cpu policy-rollout --search-root-moves 4 --search-rollout-turns 40
+```
+
+During your turn, enter a listed move number, `pass` when legal, exact card
+names like `3C 3D`, or `q` to quit.
 
 Run an official target-score game:
 
