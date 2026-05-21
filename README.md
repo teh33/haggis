@@ -82,7 +82,9 @@ python3 -m haggis.ladder \
 ```
 
 In this validation run, `policy-rollout` ranked first with a 71.4% hand win rate
-and +5280 score margin over 112 hands.
+and +5280 score margin over 112 hands. The matching benchmark at this budget
+measured `policy-rollout` at about 0.073s/decision, compared with 0.012s for the
+direct `policy` bot and 0.751s for `information-set`.
 
 ## Bot roster
 
