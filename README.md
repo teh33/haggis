@@ -67,6 +67,23 @@ Run a lightweight benchmark:
 python3 -m haggis.benchmark --bots random,greedy,point-aware,bomb-control --states 5 --seed 1 --output-json runs/benchmark.json
 ```
 
+Run a release-validation ladder with the included model:
+
+```bash
+python3 -m haggis.ladder \
+  --bots policy-rollout,policy,point-aware,bomb-control,information-set,tree-information-set,ucb-information-set,greedy \
+  --policy-model models/linear_policy.json \
+  --hands 8 \
+  --seed 20260521 \
+  --search-simulations 8 \
+  --search-root-moves 4 \
+  --search-rollout-turns 40 \
+  --output-json runs/release-validation-ladder.json
+```
+
+In this validation run, `policy-rollout` ranked first with a 71.4% hand win rate
+and +5280 score margin over 112 hands.
+
 ## Bot roster
 
 Available bot names for tournament/ladder commands:
