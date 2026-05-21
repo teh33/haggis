@@ -97,6 +97,28 @@ over 168 hands. The matching benchmark at this budget measured `policy-rollout`
 at about 0.054s/decision, compared with 0.008s for the direct `policy` bot and
 0.444s for `information-set`.
 
+## Champion/challenger promotion gates
+
+Use a fixed-seed promotion gate before replacing the default model:
+
+```bash
+python3 -m haggis.promotion \
+  --champion models/linear_policy.json \
+  --challenger runs/candidate/linear_policy.json \
+  --output-dir runs/promotion/candidate \
+  --hands 12 \
+  --seed 100 \
+  --search-root-moves 4 \
+  --search-rollout-turns 40
+```
+
+The gate runs separate champion and challenger Elo ladders against the same
+baselines, benchmarks `policy-rollout` speed for both models, writes
+`promotion.json` plus ladder/benchmark artifacts, and fails if the challenger does
+not meet the minimum rating, win-rate, and speed criteria. Use `--promote-to
+models/linear_policy.json` only when you want a passing gate to copy the
+challenger over the default model.
+
 ## CPU ratings and improvement tracking
 
 `python3 -m haggis.ladder` maintains an Elo ladder for CPU-vs-CPU comparison.
