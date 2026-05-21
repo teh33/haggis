@@ -12,7 +12,7 @@ from .engine import HaggisState, Move
 JsonObject = dict[str, Any]
 FeatureVector = dict[str, float]
 
-FEATURE_VERSION = 2
+FEATURE_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,7 @@ class LinearValueModel:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         if payload.get("model_type") != "linear_value_model":
             raise ValueError("not a Haggis linear value model")
-        if payload.get("feature_version") != FEATURE_VERSION:
+        if int(payload.get("feature_version", 0)) > FEATURE_VERSION:
             raise ValueError(f"unsupported feature version: {payload.get('feature_version')!r}")
         weights = {str(name): float(value) for name, value in payload.get("weights", {}).items()}
         return cls(
@@ -148,7 +148,7 @@ class LinearPolicy:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         if payload.get("model_type") != "linear_action_ranker":
             raise ValueError("not a Haggis linear action-ranker model")
-        if payload.get("feature_version") != FEATURE_VERSION:
+        if int(payload.get("feature_version", 0)) > FEATURE_VERSION:
             raise ValueError(f"unsupported feature version: {payload.get('feature_version')!r}")
         weights = {str(name): float(value) for name, value in payload.get("weights", {}).items()}
         return cls(weights=weights, feature_version=FEATURE_VERSION, averaged=bool(payload.get("averaged", False)))
@@ -425,6 +425,12 @@ def features_from_record_action(record: JsonObject, action: JsonObject) -> Featu
     actor_bet = float(bets[acting_player]) if len(bets) > acting_player else 0.0
     opponent_bet = float(bets[opponent]) if len(bets) > opponent else 0.0
 
+    actor_hand = _visible_hand_cards(state, acting_player)
+    action_card_ids = tuple(str(card_id) for card_id in action.get("cards", []))
+    actor_shape = _shape_features_from_card_ids(tuple(actor_hand))
+    after_shape = _shape_features_from_card_ids(tuple(card_id for card_id in actor_hand if card_id not in action_card_ids))
+    action_shape = _shape_features_from_card_ids(action_card_ids)
+
     features: FeatureVector = {
         "bias": 1.0,
         "actor_is_player_0": _bool(acting_player == 0),
@@ -458,6 +464,29 @@ def features_from_record_action(record: JsonObject, action: JsonObject) -> Featu
         "state.bet_delta": actor_bet - opponent_bet,
         "state.actor_has_played": _bool(_indexed_bool(state.get("has_played", []), acting_player)),
         "state.opponent_has_played": _bool(_indexed_bool(state.get("has_played", []), opponent)),
+        "state.opponent_near_out": _bool(opponent_cards <= 3),
+        "state.opponent_one_card": _bool(opponent_cards <= 1),
+        "action.leaves_actor_near_out": _bool(actor_cards - action_cards <= 3),
+        "action.leaves_actor_one_card": _bool(actor_cards - action_cards <= 1),
+        "action.responds_to_near_out": _bool(last_combination is not None and opponent_cards <= 3),
+        "action.trick_point_pressure": action_points + trick_points,
+        "action.captures_point_pressure": _bool(last_combination is not None and action_points + trick_points >= 5),
+        "shape.actor_pairs": actor_shape["pairs"],
+        "shape.actor_triples": actor_shape["triples"],
+        "shape.actor_bombs": actor_shape["bombs"],
+        "shape.actor_sequence_runs": actor_shape["sequence_runs"],
+        "shape.after_pairs": after_shape["pairs"],
+        "shape.after_triples": after_shape["triples"],
+        "shape.after_bombs": after_shape["bombs"],
+        "shape.after_sequence_runs": after_shape["sequence_runs"],
+        "shape.pairs_broken": max(0.0, actor_shape["pairs"] - after_shape["pairs"]),
+        "shape.triples_broken": max(0.0, actor_shape["triples"] - after_shape["triples"]),
+        "shape.bombs_broken": max(0.0, actor_shape["bombs"] - after_shape["bombs"]),
+        "shape.sequence_runs_broken": max(0.0, actor_shape["sequence_runs"] - after_shape["sequence_runs"]),
+        "shape.action_pairs": action_shape["pairs"],
+        "shape.action_triples": action_shape["triples"],
+        "shape.action_bombs": action_shape["bombs"],
+        "shape.action_sequence_runs": action_shape["sequence_runs"],
     }
     _add_combination_features(features, "action", combination)
     _add_combination_features(features, "last", last_combination)
@@ -476,6 +505,10 @@ def features_from_state_action(state: HaggisState, move: Move, *, action_index: 
     actor_captured_points = float(sum(card.points for card in state.captured[player]))
     opponent_captured_points = float(sum(card.points for card in state.captured[opponent]))
     trick_points = float(sum(card.points for card in state.trick_cards))
+    actor_shape = _shape_features_from_cards(state.hands[player])
+    after_cards = tuple(card for card in state.hands[player] if card not in move.cards)
+    after_shape = _shape_features_from_cards(after_cards)
+    action_shape = _shape_features_from_cards(move.cards)
 
     features: FeatureVector = {
         "bias": 1.0,
@@ -510,6 +543,29 @@ def features_from_state_action(state: HaggisState, move: Move, *, action_index: 
         "state.bet_delta": float(state.bets[player] - state.bets[opponent]),
         "state.actor_has_played": _bool(state.has_played[player]),
         "state.opponent_has_played": _bool(state.has_played[opponent]),
+        "state.opponent_near_out": _bool(opponent_cards <= 3),
+        "state.opponent_one_card": _bool(opponent_cards <= 1),
+        "action.leaves_actor_near_out": _bool(actor_cards - action_cards <= 3),
+        "action.leaves_actor_one_card": _bool(actor_cards - action_cards <= 1),
+        "action.responds_to_near_out": _bool(state.last_combination is not None and opponent_cards <= 3),
+        "action.trick_point_pressure": action_points + trick_points,
+        "action.captures_point_pressure": _bool(state.last_combination is not None and action_points + trick_points >= 5),
+        "shape.actor_pairs": actor_shape["pairs"],
+        "shape.actor_triples": actor_shape["triples"],
+        "shape.actor_bombs": actor_shape["bombs"],
+        "shape.actor_sequence_runs": actor_shape["sequence_runs"],
+        "shape.after_pairs": after_shape["pairs"],
+        "shape.after_triples": after_shape["triples"],
+        "shape.after_bombs": after_shape["bombs"],
+        "shape.after_sequence_runs": after_shape["sequence_runs"],
+        "shape.pairs_broken": max(0.0, actor_shape["pairs"] - after_shape["pairs"]),
+        "shape.triples_broken": max(0.0, actor_shape["triples"] - after_shape["triples"]),
+        "shape.bombs_broken": max(0.0, actor_shape["bombs"] - after_shape["bombs"]),
+        "shape.sequence_runs_broken": max(0.0, actor_shape["sequence_runs"] - after_shape["sequence_runs"]),
+        "shape.action_pairs": action_shape["pairs"],
+        "shape.action_triples": action_shape["triples"],
+        "shape.action_bombs": action_shape["bombs"],
+        "shape.action_sequence_runs": action_shape["sequence_runs"],
     }
     _add_combination_features(features, "action", _combination_payload(move.combination))
     _add_combination_features(features, "last", _combination_payload(state.last_combination))
@@ -543,6 +599,112 @@ def _combination_payload(combination: Combination | None) -> JsonObject | None:
         "sequence_length": combination.sequence_length,
         "is_bomb": combination.type == CombinationType.BOMB,
     }
+
+
+def _visible_hand_cards(state: JsonObject, player: int) -> tuple[str, ...]:
+    hand = state.get("hands", [None, None])[player]
+    if not hand:
+        return ()
+    return tuple(str(card_id) for card_id in hand)
+
+
+def _shape_features_from_card_ids(card_ids: tuple[str, ...]) -> FeatureVector:
+    cards = [_card_id_parts(card_id) for card_id in card_ids]
+    rank_counts: dict[int, int] = {}
+    suit_ranks: dict[str, set[int]] = {}
+    for rank, suit, is_wild in cards:
+        if is_wild:
+            continue
+        rank_counts[rank] = rank_counts.get(rank, 0) + 1
+        suit_ranks.setdefault(suit, set()).add(rank)
+    ranks = {rank for rank, _suit, is_wild in cards if not is_wild}
+    suits_by_rank: dict[int, set[str]] = {}
+    for rank, suit, is_wild in cards:
+        if not is_wild:
+            suits_by_rank.setdefault(rank, set()).add(suit)
+    return _shape_features(rank_counts, suit_ranks, suits_by_rank, ranks)
+
+
+def _shape_features_from_cards(cards: tuple[Card, ...]) -> FeatureVector:
+    rank_counts: dict[int, int] = {}
+    suit_ranks: dict[str, set[int]] = {}
+    suits_by_rank: dict[int, set[str]] = {}
+    ranks: set[int] = set()
+    for card in cards:
+        if card.is_wild:
+            continue
+        rank = int(card.rank)
+        suit = str(card.suit)
+        ranks.add(rank)
+        rank_counts[rank] = rank_counts.get(rank, 0) + 1
+        suit_ranks.setdefault(suit, set()).add(rank)
+        suits_by_rank.setdefault(rank, set()).add(suit)
+    return _shape_features(rank_counts, suit_ranks, suits_by_rank, ranks)
+
+
+def _shape_features(
+    rank_counts: dict[int, int],
+    suit_ranks: dict[str, set[int]],
+    suits_by_rank: dict[int, set[str]],
+    ranks: set[int],
+) -> FeatureVector:
+    return {
+        "pairs": float(sum(1 for count in rank_counts.values() if count >= 2)),
+        "triples": float(sum(1 for count in rank_counts.values() if count >= 3)),
+        "bombs": float(_bomb_shape_count(suits_by_rank, ranks)),
+        "sequence_runs": float(sum(_sequence_run_count(suit_rank_set) for suit_rank_set in suit_ranks.values())),
+    }
+
+
+def _sequence_run_count(ranks: set[int]) -> int:
+    count = 0
+    run = 0
+    for rank in range(2, 14):
+        if rank in ranks:
+            run += 1
+        else:
+            if run >= 3:
+                count += run - 2
+            run = 0
+    if run >= 3:
+        count += run - 2
+    return count
+
+
+def _bomb_shape_count(suits_by_rank: dict[int, set[str]], ranks: set[int]) -> int:
+    suited_3579 = sum(1 for suit in {"♣", "♦", "♥", "♠"} if all(suit in suits_by_rank.get(rank, set()) for rank in (3, 5, 7, 9)))
+    rainbow_3579 = 1 if _has_3579_rainbow_bomb(suits_by_rank) else 0
+    face_bombs = 0
+    if 11 in ranks and 12 in ranks:
+        face_bombs += 1
+    if 11 in ranks and 13 in ranks:
+        face_bombs += 1
+    if 12 in ranks and 13 in ranks:
+        face_bombs += 1
+    if all(rank in ranks for rank in (11, 12, 13)):
+        face_bombs += 1
+    return suited_3579 + rainbow_3579 + face_bombs
+
+
+def _has_3579_rainbow_bomb(suits_by_rank: dict[int, set[str]]) -> bool:
+    needed = (3, 5, 7, 9)
+    if any(rank not in suits_by_rank for rank in needed):
+        return False
+
+    def assign(index: int, used: set[str]) -> bool:
+        if index == len(needed):
+            return True
+        return any(suit not in used and assign(index + 1, used | {suit}) for suit in suits_by_rank[needed[index]])
+
+    return assign(0, set())
+
+
+def _card_id_parts(card_id: str) -> tuple[int, str, bool]:
+    is_wild = card_id.endswith("*")
+    core = card_id[:-1] if is_wild else card_id
+    rank_label = core[:-1]
+    rank = {"J": 11, "Q": 12, "K": 13}[rank_label] if rank_label in {"J", "Q", "K"} else int(rank_label)
+    return rank, core[-1], is_wild
 
 
 def _visible_hand_points(state: JsonObject, player: int) -> float:
