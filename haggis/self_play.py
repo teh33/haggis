@@ -23,6 +23,11 @@ def export_self_play_jsonl(
     max_turns: int = 500,
     enable_betting: bool = True,
     observation_mode: str = "perfect",
+    bot_a_policy_model: str | None = None,
+    bot_b_policy_model: str | None = None,
+    search_simulations: int | None = None,
+    search_root_moves: int | None = None,
+    search_rollout_turns: int | None = None,
 ) -> int:
     """Write JSONL decision records from deterministic bot-vs-bot self-play.
 
@@ -36,6 +41,11 @@ def export_self_play_jsonl(
         max_turns=max_turns,
         enable_betting=enable_betting,
         observation_mode=observation_mode,
+        bot_a_policy_model=bot_a_policy_model,
+        bot_b_policy_model=bot_b_policy_model,
+        search_simulations=search_simulations,
+        search_root_moves=search_root_moves,
+        search_rollout_turns=search_rollout_turns,
     )
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,12 +67,39 @@ def generate_self_play_records(
     max_turns: int = 500,
     enable_betting: bool = True,
     observation_mode: str = "perfect",
+    bot_a_policy_model: str | None = None,
+    bot_b_policy_model: str | None = None,
+    search_simulations: int | None = None,
+    search_root_moves: int | None = None,
+    search_rollout_turns: int | None = None,
 ) -> tuple[JsonObject, ...]:
     if hands < 1:
         raise ValueError("hands must be at least 1")
     _validate_observation_mode(observation_mode)
 
-    bots = (make_bot(bot_a, seed=seed * 2 + 1), make_bot(bot_b, seed=seed * 2 + 2))
+    search_config = {
+        "search_simulations": search_simulations,
+        "search_root_moves": search_root_moves,
+        "search_rollout_turns": search_rollout_turns,
+    }
+    bots = (
+        make_bot(
+            bot_a,
+            seed=seed * 2 + 1,
+            policy_model=bot_a_policy_model,
+            search_simulations=search_simulations,
+            search_root_moves=search_root_moves,
+            search_rollout_turns=search_rollout_turns,
+        ),
+        make_bot(
+            bot_b,
+            seed=seed * 2 + 2,
+            policy_model=bot_b_policy_model,
+            search_simulations=search_simulations,
+            search_root_moves=search_root_moves,
+            search_rollout_turns=search_rollout_turns,
+        ),
+    )
     all_records: list[JsonObject] = []
 
     for hand_index in range(hands):
@@ -78,6 +115,8 @@ def generate_self_play_records(
                 max_turns=max_turns,
                 enable_betting=enable_betting,
                 observation_mode=observation_mode,
+                model_paths=(bot_a_policy_model, bot_b_policy_model),
+                search_config=search_config,
             )
         )
 
@@ -94,6 +133,8 @@ def _play_hand_records(
     max_turns: int,
     enable_betting: bool,
     observation_mode: str,
+    model_paths: tuple[str | None, str | None],
+    search_config: JsonObject,
 ) -> tuple[JsonObject, ...]:
     state = HaggisState.new_deal(seed=seed, dealer=dealer).assert_invariants(full_deck=True)
     if enable_betting:
@@ -123,6 +164,12 @@ def _play_hand_records(
                 "turn_index": turn_index,
                 "acting_player": player,
                 "observation_mode": observation_mode,
+                "teacher": {
+                    "bot": bot_names[player],
+                    "model_path": model_paths[player],
+                    "search": dict(search_config),
+                },
+                "dataset_source": "search_improved" if _is_search_teacher(bot_names[player], search_config) else "bot_policy",
                 "state": _state_summary(state, perspective=player, observation_mode=observation_mode),
                 "legal_actions": [_action_summary(index, legal_move) for index, legal_move in enumerate(legal_moves)],
                 "selected_action_index": selected_index,
@@ -152,6 +199,12 @@ def _play_hand_records(
         finalized.append(record)
 
     return tuple(finalized)
+
+
+def _is_search_teacher(bot_name: str, search_config: JsonObject) -> bool:
+    if bot_name in {"policy-rollout", "tree-information-set", "information-set", "ucb-information-set", "monte-carlo"}:
+        return True
+    return any(value is not None for value in search_config.values())
 
 
 def _state_summary(state: HaggisState, *, perspective: int, observation_mode: str) -> JsonObject:
@@ -225,6 +278,8 @@ def summarize_self_play_jsonl(path: str | Path) -> JsonObject:
 
     observation_modes = Counter(record.get("observation_mode", "unknown") for record in records)
     bot_names = Counter(tuple(record.get("bot_names", ())) for record in records)
+    dataset_sources = Counter(record.get("dataset_source", "unknown") for record in records)
+    teachers = Counter(str(record.get("teacher", {}).get("bot", "unknown")) for record in records)
     actor_counts = Counter(str(record.get("acting_player")) for record in records)
     action_types = Counter(_selected_action_type(record) for record in records)
     winners = Counter(str(record.get("outcome", {}).get("winner")) for record in records)
@@ -235,6 +290,8 @@ def summarize_self_play_jsonl(path: str | Path) -> JsonObject:
         "records": len(records),
         "observation_modes": dict(sorted(observation_modes.items())),
         "bot_names": {" vs ".join(names): count for names, count in sorted(bot_names.items())},
+        "dataset_sources": dict(sorted(dataset_sources.items())),
+        "teachers": dict(sorted(teachers.items())),
         "actor_counts": dict(sorted(actor_counts.items())),
         "selected_action_types": dict(sorted(action_types.items())),
         "outcomes": {
@@ -256,6 +313,8 @@ def format_summary(summary: JsonObject) -> str:
             f"Records: {summary['records']}",
             f"Observation modes: {summary['observation_modes']}",
             f"Bot names: {summary['bot_names']}",
+            f"Dataset sources: {summary.get('dataset_sources', {})}",
+            f"Teachers: {summary.get('teachers', {})}",
             f"Actor counts: {summary['actor_counts']}",
             f"Selected action types: {summary['selected_action_types']}",
             f"Winner counts: {summary['outcomes']['winner_counts']}",
@@ -291,6 +350,12 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--max-turns", type=int, default=500)
     export.add_argument("--no-betting", action="store_true", help="Disable bot pre-play betting in exported records")
     export.add_argument("--observation-mode", choices=("perfect", "player"), default="perfect")
+    export.add_argument("--bot-a-policy-model", help="Policy model path for bot A when using policy-based teachers")
+    export.add_argument("--bot-b-policy-model", help="Policy model path for bot B when using policy-based teachers")
+    export.add_argument("--policy-model", help="Convenience model path applied to both bots")
+    export.add_argument("--search-simulations", type=int)
+    export.add_argument("--search-root-moves", type=int)
+    export.add_argument("--search-rollout-turns", type=int)
     export.add_argument("--output", required=True, help="Path to write JSONL records")
 
     summary = subparsers.add_parser("summary", help="Summarize a self-play JSONL dataset")
@@ -305,6 +370,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-turns", type=int, default=500)
     parser.add_argument("--no-betting", action="store_true", help="Disable bot pre-play betting in exported records")
     parser.add_argument("--observation-mode", choices=("perfect", "player"), default="perfect")
+    parser.add_argument("--bot-a-policy-model", help="Policy model path for bot A when using policy-based teachers")
+    parser.add_argument("--bot-b-policy-model", help="Policy model path for bot B when using policy-based teachers")
+    parser.add_argument("--policy-model", help="Convenience model path applied to both bots")
+    parser.add_argument("--search-simulations", type=int)
+    parser.add_argument("--search-root-moves", type=int)
+    parser.add_argument("--search-rollout-turns", type=int)
     parser.add_argument("--output", help="Path to write JSONL records")
     return parser
 
@@ -321,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output
     if output is None:
         raise SystemExit("--output is required when exporting self-play records")
+    model_a = args.bot_a_policy_model or args.policy_model
+    model_b = args.bot_b_policy_model or args.policy_model
     count = export_self_play_jsonl(
         output,
         bot_a=args.bot_a,
@@ -330,6 +403,11 @@ def main(argv: list[str] | None = None) -> int:
         max_turns=args.max_turns,
         enable_betting=not args.no_betting,
         observation_mode=args.observation_mode,
+        bot_a_policy_model=model_a,
+        bot_b_policy_model=model_b,
+        search_simulations=args.search_simulations,
+        search_root_moves=args.search_root_moves,
+        search_rollout_turns=args.search_rollout_turns,
     )
     print(f"Wrote {count} self-play decision records to {output}")
     return 0

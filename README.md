@@ -283,6 +283,25 @@ Observation modes:
 Self-play exports include bot pre-play bets by default; pass `--no-betting` to
 write zero-bet compatibility records.
 
+To generate stronger AlphaGo-style policy targets, use search-guided teachers and
+record the teacher metadata in each JSONL row:
+
+```bash
+python3 -m haggis.self_play export \
+  --bot-a policy-rollout \
+  --bot-b policy-rollout \
+  --policy-model models/linear_policy.json \
+  --search-root-moves 4 \
+  --search-rollout-turns 40 \
+  --hands 100 \
+  --seed 2 \
+  --observation-mode player \
+  --output data/search_improved.jsonl
+```
+
+Those records include `dataset_source: "search_improved"` and a `teacher` object
+with the bot/model/search settings that produced the selected action.
+
 ### 2. Train a linear imitation policy
 
 ```bash

@@ -22,6 +22,9 @@ class SelfPlayExportTests(unittest.TestCase):
         record = records[0]
         self.assertEqual(record["schema_version"], 1)
         self.assertEqual(record["observation_mode"], "perfect")
+        self.assertEqual(record["dataset_source"], "bot_policy")
+        self.assertEqual(record["teacher"]["bot"], record["bot_names"][record["acting_player"]])
+        self.assertEqual(record["teacher"]["search"]["search_root_moves"], None)
         self.assertEqual(record["bot_names"], ["point-aware", "bomb-control"])
         self.assertEqual(record["hand_index"], 0)
         self.assertEqual(record["hand_seed"], 7)
@@ -34,6 +37,27 @@ class SelfPlayExportTests(unittest.TestCase):
         self.assertIn("outcome", record)
         self.assertIn(record["outcome"]["winner"], (0, 1))
         self.assertIn("score_margin_for_actor", record["outcome"])
+
+    def test_generate_records_supports_search_improved_policy_rollout_teachers(self):
+        records = generate_self_play_records(
+            bot_a="policy-rollout",
+            bot_b="policy-rollout",
+            hands=1,
+            seed=7,
+            observation_mode="player",
+            bot_a_policy_model="models/linear_policy.json",
+            bot_b_policy_model="models/linear_policy.json",
+            search_root_moves=3,
+            search_rollout_turns=8,
+        )
+
+        self.assertGreater(len(records), 0)
+        record = records[0]
+        self.assertEqual(record["dataset_source"], "search_improved")
+        self.assertEqual(record["teacher"]["bot"], "policy-rollout")
+        self.assertEqual(record["teacher"]["model_path"], "models/linear_policy.json")
+        self.assertEqual(record["teacher"]["search"]["search_root_moves"], 3)
+        self.assertEqual(record["teacher"]["search"]["search_rollout_turns"], 8)
 
     def test_generate_records_is_deterministic(self):
         first = generate_self_play_records(bot_a="random", bot_b="greedy", hands=2, seed=5)
@@ -208,6 +232,43 @@ class SelfPlayExportTests(unittest.TestCase):
         self.assertIsNone(records[0]["state"]["hands"][1 - records[0]["acting_player"]])
         self.assertIsNone(records[0]["state"]["haggis_points"])
 
+    def test_cli_can_export_search_improved_player_observation_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "records.jsonl"
+
+            exit_code = main(
+                [
+                    "export",
+                    "--bot-a",
+                    "policy-rollout",
+                    "--bot-b",
+                    "policy-rollout",
+                    "--hands",
+                    "1",
+                    "--seed",
+                    "2",
+                    "--observation-mode",
+                    "player",
+                    "--policy-model",
+                    "models/linear_policy.json",
+                    "--search-root-moves",
+                    "3",
+                    "--search-rollout-turns",
+                    "8",
+                    "--output",
+                    str(output),
+                ]
+            )
+
+            records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+
+        self.assertEqual(exit_code, 0)
+        self.assertGreater(len(records), 0)
+        self.assertEqual(records[0]["dataset_source"], "search_improved")
+        self.assertEqual(records[0]["teacher"]["model_path"], "models/linear_policy.json")
+        self.assertEqual(records[0]["teacher"]["search"]["search_root_moves"], 3)
+        self.assertEqual(records[0]["observation_mode"], "player")
+
     def test_summarize_self_play_jsonl_reports_dataset_distribution(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "records.jsonl"
@@ -218,6 +279,10 @@ class SelfPlayExportTests(unittest.TestCase):
         self.assertGreater(summary["records"], 0)
         self.assertEqual(summary["observation_modes"], {"perfect": summary["records"]})
         self.assertEqual(summary["bot_names"], {"point-aware vs bomb-control": summary["records"]})
+        self.assertEqual(summary["dataset_sources"], {"bot_policy": summary["records"]})
+        self.assertEqual(sum(summary["teachers"].values()), summary["records"])
+        self.assertIn("point-aware", summary["teachers"])
+        self.assertIn("bomb-control", summary["teachers"])
         self.assertEqual(sum(summary["actor_counts"].values()), summary["records"])
         self.assertGreater(sum(summary["selected_action_types"].values()), 0)
         self.assertIn("winner_counts", summary["outcomes"])
@@ -230,6 +295,8 @@ class SelfPlayExportTests(unittest.TestCase):
             "records": 2,
             "observation_modes": {"player": 2},
             "bot_names": {"a vs b": 2},
+            "dataset_sources": {"search_improved": 2},
+            "teachers": {"policy-rollout": 2},
             "actor_counts": {"0": 1, "1": 1},
             "selected_action_types": {"set": 2},
             "outcomes": {"winner_counts": {"0": 2}, "actor_win_rate": 0.5},
@@ -241,6 +308,8 @@ class SelfPlayExportTests(unittest.TestCase):
         self.assertIn("Haggis self-play dataset summary", output)
         self.assertIn("Records: 2", output)
         self.assertIn("Observation modes:", output)
+        self.assertIn("Dataset sources:", output)
+        self.assertIn("Teachers:", output)
         self.assertIn("Selected action types:", output)
         self.assertIn("Actor win rate:", output)
 
