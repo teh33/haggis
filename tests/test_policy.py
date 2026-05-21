@@ -123,6 +123,43 @@ class PolicyTrainingTests(unittest.TestCase):
         self.assertEqual(from_record["state.opponent_bet"], from_state["state.opponent_bet"])
         self.assertEqual(from_record["state.bet_delta"], from_state["state.bet_delta"])
 
+    def test_richer_policy_features_describe_shape_pressure_and_near_out(self):
+        record = {
+            "acting_player": 0,
+            "state": {
+                "hands": [["3♣", "3♦", "4♣", "5♣", "7♣", "9♣", "K♣*"], None],
+                "hand_sizes": [7, 2],
+                "captured_points": [0, 0],
+                "trick_points": 4,
+                "haggis_points": None,
+                "last_combination": {"type": "set", "rank": 6, "card_count": 1, "bomb_rank": 0, "sequence_width": 0, "sequence_length": 0, "is_bomb": False},
+                "bets": [0, 30],
+                "has_played": [True, True],
+            },
+            "legal_actions": [],
+            "selected_action_index": 0,
+            "outcome": {"actor_won": True},
+        }
+        action = {
+            "index": 0,
+            "is_pass": False,
+            "cards": ["3♣"],
+            "point_risk": 1,
+            "combination": {"type": "set", "rank": 3, "card_count": 1, "bomb_rank": 0, "sequence_width": 0, "sequence_length": 0, "is_bomb": False},
+        }
+
+        features = features_from_record_action(record, action)
+
+        self.assertEqual(features["state.opponent_near_out"], 1.0)
+        self.assertEqual(features["action.responds_to_near_out"], 1.0)
+        self.assertEqual(features["action.trick_point_pressure"], 5.0)
+        self.assertEqual(features["action.captures_point_pressure"], 1.0)
+        self.assertEqual(features["shape.actor_pairs"], 1.0)
+        self.assertEqual(features["shape.after_pairs"], 0.0)
+        self.assertEqual(features["shape.pairs_broken"], 1.0)
+        self.assertEqual(features["shape.actor_sequence_runs"], 1.0)
+        self.assertEqual(features["shape.actor_bombs"], 1.0)
+
     def test_training_saves_loads_and_improves_accuracy_on_examples(self):
         with tempfile.TemporaryDirectory() as directory:
             data_path = Path(directory) / "records.jsonl"
