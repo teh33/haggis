@@ -81,12 +81,11 @@ python3 -m haggis.ladder \
   --output-json runs/release-validation-ladder.json
 ```
 
-In the larger 12-hand validation run, `policy-rollout` ranked first with a 67.3%
-hand win rate and +6756 score margin over 168 hands. A smaller 8-hand validation
-run also ranked `policy-rollout` first at 71.4% over 112 hands. The matching
-benchmark at this budget measured `policy-rollout` at about 0.073s/decision,
-compared with 0.012s for the direct `policy` bot and 0.751s for
-`information-set`.
+In the current 12-hand validation run for the promoted larger model,
+`policy-rollout` ranked first with a 72.0% hand win rate and +8024 score margin
+over 168 hands. The matching benchmark at this budget measured `policy-rollout`
+at about 0.050s/decision, compared with 0.008s for the direct `policy` bot and
+0.432s for `information-set`.
 
 ## Bot roster
 
