@@ -271,7 +271,7 @@ seeded small hands, including bombs, wilds, and sequences.
 
 Remaining useful next steps:
 
-1. Mature the shallow `tree-information-set` prototype into fuller ISMCTS with deeper reusable child nodes.
+1. Mature the shallow `tree-information-set` prototype into stronger ISMCTS; it now has reusable deeper child nodes, but still trails simpler `information-set` in small ladders.
 2. Run even larger ladders before treating `models/linear_policy.json` as a release-strength model.
 3. Add more evaluation runs against stronger/search opponents and tune policy-rollout/tree-search budgets.
 4. Continue profiling sequence generation if larger ladders need more throughput.

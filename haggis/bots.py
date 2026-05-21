@@ -272,7 +272,7 @@ class TreeInformationSetBot:
         root_moves = _root_candidates(state, legal_moves, min(self.max_root_moves, self.simulations))
         visits = [0 for _ in root_moves]
         values = [0.0 for _ in root_moves]
-        children: list[dict[Move, list[float]]] = [{} for _ in root_moves]
+        children: list[_TreeSearchNode] = [_TreeSearchNode() for _ in root_moves]
 
         for simulation_index in range(max(self.simulations, len(root_moves))):
             move_index = self._select_index(visits, values, simulation_index + 1)
@@ -285,7 +285,7 @@ class TreeInformationSetBot:
 
         return root_moves, visits, values
 
-    def _tree_value(self, state: HaggisState, root_player: int, *, depth: int, node: dict[Move, list[float]]) -> float:
+    def _tree_value(self, state: HaggisState, root_player: int, *, depth: int, node: _TreeSearchNode) -> float:
         if state.hand_winner is not None:
             score = state.score_hand().points
             return float(score[root_player] - score[1 - root_player])
@@ -296,26 +296,31 @@ class TreeInformationSetBot:
         if not legal_moves:
             return float(_static_value(state, root_player))
         for move in legal_moves:
-            node.setdefault(move, [0.0, 0.0])
+            node.children.setdefault(move, _TreeSearchNode())
 
-        total_visits = int(sum(stats[0] for stats in node.values())) + 1
-        move = max(legal_moves, key=lambda candidate: self._tree_score(node[candidate], total_visits, state.current_player == root_player, candidate))
+        move = self._select_tree_move(node, legal_moves, state.current_player == root_player)
+        child = node.children[move]
         child_state = state.apply_move(move)
-        value = _rollout_value(child_state, root_player, self.rng, self.max_rollout_turns, rollout_policy=self.policy)
-        stats = node[move]
-        stats[0] += 1.0
-        stats[1] += value
+        value = self._tree_value(child_state, root_player, depth=depth - 1, node=child)
+        child.visits += 1
+        child.value_sum += value
         return value
 
-    def _tree_score(self, stats: list[float], total_visits: int, maximizing: bool, move: Move) -> tuple[float, tuple[int, int, int, int, tuple[str, ...]]]:
-        visits, value_sum = stats
-        if visits == 0:
+    def _select_tree_move(self, node: _TreeSearchNode, legal_moves: tuple[Move, ...], maximizing: bool) -> Move:
+        total_visits = sum(child.visits for child in node.children.values()) + 1
+        return max(
+            legal_moves,
+            key=lambda candidate: self._tree_score(node.children[candidate], total_visits, maximizing, candidate),
+        )
+
+    def _tree_score(self, node: _TreeSearchNode, total_visits: int, maximizing: bool, move: Move) -> tuple[float, tuple[int, int, int, int, tuple[str, ...]]]:
+        if node.visits == 0:
             mean = float("inf") if maximizing else float("-inf")
         else:
-            mean = value_sum / visits
+            mean = node.value_sum / node.visits
             if not maximizing:
                 mean = -mean
-            mean += self.exploration * sqrt(log(max(total_visits, 2)) / visits)
+            mean += self.exploration * sqrt(log(max(total_visits, 2)) / node.visits)
         return (mean, _search_tiebreak_key(move))
 
     def _select_index(self, visits: list[int], values: list[float], total_visits: int) -> int:
@@ -330,6 +335,13 @@ class TreeInformationSetBot:
             exploration = self.exploration * sqrt(log_total / visit_count)
             scores.append((exploitation + exploration, -index, index))
         return max(scores)[2]
+
+
+class _TreeSearchNode:
+    def __init__(self) -> None:
+        self.visits = 0
+        self.value_sum = 0.0
+        self.children: dict[Move, _TreeSearchNode] = {}
 
 
 class InformationSetRolloutBot:
