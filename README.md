@@ -91,11 +91,12 @@ python3 -m haggis.ladder \
   --output-json runs/release-validation-ladder.json
 ```
 
-In the current 12-hand validation run for the promoted official-scoring model,
-`policy-rollout` ranked first with a 68.5% hand win rate and +6883 score margin
-over 168 hands. The matching benchmark at this budget measured `policy-rollout`
-at about 0.054s/decision, compared with 0.008s for the direct `policy` bot and
-0.444s for `information-set`.
+In the extended 20-hand validation run for the promoted mixed-teacher model,
+`policy-rollout` ranked first with a 73.2% hand win rate and +14603 score margin
+over 280 hands. The matching 50-state benchmark at this budget measured
+`policy-rollout` at about 0.036s/decision, compared with 0.006s for the direct
+`policy` bot and 0.381s for `information-set`. Artifacts are under
+`runs/promoted-candidate-002-validation/`.
 
 ## Champion/challenger promotion gates
 
