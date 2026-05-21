@@ -404,6 +404,75 @@ This writes:
 - `metrics.json` — training, direct-policy evaluation, and optional policy-rollout metrics;
 - `ladder.json` — optional policy/policy-rollout-vs-baselines ladder ratings when `--ladder-hands` is set.
 
+### 5. Iterative self-play training schedule
+
+Use a staged loop inspired by AlphaGo/AlphaZero: generate stronger self-play,
+train, evaluate against the current champion, and promote only through a gate.
+Keep failed candidates as artifacts, but do not overwrite `models/linear_policy.json`.
+
+| Stage | Purpose | Data | Teacher/search budget | Gate | Expected runtime |
+| --- | --- | --- | --- | --- | --- |
+| Smoke | Verify the pipeline after code or rules changes. | 10-20 hands | `policy-rollout`, root 2-3, turns 8-20 | Trainer succeeds and tiny promotion gate writes artifacts. | < 5 min |
+| Candidate | Produce a plausible local challenger. | 200-500 hands | `policy-rollout`, root 4, turns 40 | Challenger `policy-rollout` rating and win-rate deltas are >= 0; speed ratio <= 1.25. | 15-60 min |
+| Serious | Get a meaningful strength signal. | 1k-5k hands | Mixed `policy-rollout`, `information-set`, and `tree-information-set`; root 4-6, turns 40-80 | Positive Elo/win-rate deltas across fixed seeds; no speed regression; full tests pass. | Hours |
+| Release | Promote only a stable champion. | 10k+ hands or multiple serious runs | Best accepted teacher mix and budget | Passes champion/challenger gate on at least two seeds and README/model metadata are updated. | Overnight+ |
+
+Recommended candidate loop:
+
+```bash
+python3 -m haggis.self_play export \
+  --bot-a policy-rollout \
+  --bot-b policy-rollout \
+  --policy-model models/linear_policy.json \
+  --search-root-moves 4 \
+  --search-rollout-turns 40 \
+  --hands 300 \
+  --seed 10 \
+  --observation-mode player \
+  --output runs/candidate/search_improved.jsonl
+
+python3 -m haggis.policy train \
+  --input runs/candidate/search_improved.jsonl \
+  --output runs/candidate/linear_policy.json \
+  --epochs 8 \
+  --averaged \
+  --validation-fraction 0.2
+
+python3 -m haggis.policy train-value \
+  --input runs/candidate/search_improved.jsonl \
+  --output runs/candidate/value_model.json \
+  --epochs 5 \
+  --validation-fraction 0.2 \
+  --target actor_score_margin_normalized
+
+python3 -m haggis.promotion \
+  --champion models/linear_policy.json \
+  --challenger runs/candidate/linear_policy.json \
+  --output-dir runs/candidate/promotion \
+  --hands 12 \
+  --seed 100 \
+  --search-root-moves 4 \
+  --search-rollout-turns 40
+```
+
+Promotion criteria:
+
+- challenger `policy-rollout` rating delta >= 0 against the champion;
+- challenger hand win-rate delta >= 0 on the fixed gate;
+- challenger speed ratio <= 1.25 at the recommended budget;
+- `python3 -m compileall haggis tests` and `python3 -m unittest discover -s tests` pass;
+- `promotion.json`, ladder JSON, benchmark JSON, and model artifacts are kept under `runs/`.
+
+Rollback/rejection criteria:
+
+- If the promotion gate fails, keep the candidate in `runs/` but do not copy it to
+  `models/linear_policy.json`.
+- If strength improves but speed regresses, reject or rerun with a cheaper rollout
+  budget before promotion.
+- If direct `policy` improves but `policy-rollout` regresses, keep the model as an
+  experiment only; the default CPU is `policy-rollout`.
+- If rules or scoring change, retrain before treating old ratings as comparable.
+
 A larger local run at `runs/strength-family-pruning/` trained on 80 player-observation
 hands and evaluated `policy-rollout` against the baselines. In that sample,
 `policy-rollout` swept the ladder at 24/24 hand wins with about 0.12s/decision at
