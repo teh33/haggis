@@ -143,6 +143,72 @@ python3 -m haggis.tournament \
 
 For stronger but slower play, use root `6` and rollout turns `80`.
 
+## Strategy guide
+
+Haggis is a climbing/shedding game: you win hands by going out, but the score is
+mostly decided by who captures point cards, haggis cards, and successful bets.
+Good play balances tempo, point control, and bomb timing.
+
+### Core priorities
+
+1. **Go out before the opponent.** Emptying your hand ends the hand and usually
+   awards the opponent's remaining card points to you. Moves that shed multiple
+   cards are valuable when they do not donate too many points.
+2. **Do not donate points cheaply.** Fives, tens, kings, and wild cards carry
+   points. Avoid spending them into tricks you are unlikely to win back.
+3. **Control the lead.** Leading lets you choose the combination family. If your
+   hand has strong pairs, sequences, or bombs, try to regain the lead before your
+   opponent can shed freely.
+4. **Save bombs for leverage.** Bombs can beat normal combinations and many lower
+   bombs. They are strongest when they stop an opponent from going out, recapture
+   a point-heavy trick, or let you immediately shed afterward.
+5. **Respect hand size.** When the opponent has only a few cards, prefer moves
+   that force an awkward response or preserve a bomb/pass option. When you are
+   behind on cards, prioritize shedding and avoid long value fights.
+
+### Opening and betting
+
+- Bet only with real strength: multiple wilds, high point density, strong same-rank
+  groups, or flexible sequences.
+- A speculative bet can erase a good hand if you fail to go out first, so avoid
+  betting just because you have points.
+- Early in the hand, lead low-commitment combinations that reveal little and keep
+  your wilds flexible.
+
+### Midgame tactics
+
+- Prefer plays that either shed many cards or preserve future structure. Breaking a
+  strong sequence to win a small trick is often bad.
+- Passing is fine when the current trick is low value and winning would cost a
+  bomb, wild, or high point card.
+- If a trick contains many points, winning it can be worth spending a stronger
+  combination, especially if it also gives you the lead.
+- Track what shapes have been played. If your opponent keeps passing on pairs or
+  sequences, lead that shape again when it helps you shed.
+
+### Endgame tactics
+
+- Count both hand sizes every turn. A one-card opponent can go out on almost any
+  lead; a two-card opponent may be holding a pair, bomb, or two singles.
+- If you can go out immediately, usually do it unless it gives away a catastrophic
+  point trick.
+- Use bombs defensively to stop an opponent's likely final play, then lead the
+  shape that empties or nearly empties your own hand.
+- Preserve low singles when possible. They are useful for safely leading after you
+  win a trick with a bomb or high combination.
+
+### Playing against the included CPU
+
+The strongest default bot is `policy-rollout`. It is good at tempo and tactical
+rollouts, so beat it by avoiding obvious point donations and by forcing awkward
+combination families. The simpler heuristic bots are easier to exploit:
+
+- `greedy` overvalues shedding; feed it low-value tricks and punish point dumps.
+- `point-aware` protects points but may miss tempo wins; pressure it with hand-size
+  leads.
+- `bomb-control` holds bombs conservatively; bait passes with medium threats, then
+  switch shapes.
+
 For example:
 
 ```bash
