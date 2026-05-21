@@ -43,6 +43,7 @@ def run_benchmark(
     search_simulations: int | None = None,
     search_root_moves: int | None = None,
     search_rollout_turns: int | None = None,
+    policy_model: str | None = None,
 ) -> BenchmarkResult:
     if states < 1:
         raise ValueError("states must be at least 1")
@@ -62,6 +63,7 @@ def run_benchmark(
             search_simulations=search_simulations,
             search_root_moves=search_root_moves,
             search_rollout_turns=search_rollout_turns,
+            policy_model=policy_model,
         )
         for bot_name in bot_names
     )
@@ -139,6 +141,7 @@ def _benchmark_bot(
     search_simulations: int | None,
     search_root_moves: int | None,
     search_rollout_turns: int | None,
+    policy_model: str | None,
 ) -> BotBenchmark:
     bot = make_bot(
         bot_name,
@@ -146,6 +149,7 @@ def _benchmark_bot(
         search_simulations=search_simulations,
         search_root_moves=search_root_moves,
         search_rollout_turns=search_rollout_turns,
+        policy_model=policy_model,
     )
     selected: list[str] = []
     started = perf_counter()
@@ -178,6 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--search-simulations", type=int)
     parser.add_argument("--search-root-moves", type=int)
     parser.add_argument("--search-rollout-turns", type=int)
+    parser.add_argument("--policy-model", help="Model path when benchmarking policy or policy-rollout bots")
     parser.add_argument("--output-json")
     return parser
 
@@ -192,6 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         search_simulations=args.search_simulations,
         search_root_moves=args.search_root_moves,
         search_rollout_turns=args.search_rollout_turns,
+        policy_model=args.policy_model,
     )
     print(format_benchmark_summary(result))
     if args.output_json:
@@ -205,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
                 "search_simulations": args.search_simulations,
                 "search_root_moves": args.search_root_moves,
                 "search_rollout_turns": args.search_rollout_turns,
+                "policy_model": args.policy_model,
             },
         )
     return 0

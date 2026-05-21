@@ -35,6 +35,7 @@ class ExperimentResult:
     train_examples: int
     validation_examples: int
     evaluation: dict[str, JsonObject]
+    rollout_evaluation: dict[str, JsonObject]
     ladder_ran: bool = False
 
 
@@ -54,6 +55,10 @@ def run_policy_experiment(
     averaged: bool = False,
     validation_fraction: float = 0.0,
     ladder_hands: int = 0,
+    evaluate_policy_rollout: bool = False,
+    rollout_simulations: int = 2,
+    rollout_root_moves: int = 8,
+    rollout_turns: int = 120,
 ) -> ExperimentResult:
     if data_hands < 1:
         raise ValueError("data_hands must be at least 1")
@@ -86,18 +91,36 @@ def run_policy_experiment(
     )
     policy.save(artifacts.model_path)
 
-    evaluation = _evaluate_policy(
+    evaluation = _evaluate_bot(
+        bot_name="policy",
         eval_opponents=tuple(eval_opponents),
         eval_hands=eval_hands,
         seed=seed,
         max_turns=max_turns,
         model_path=artifacts.model_path,
     )
+    rollout_evaluation = {}
+    if evaluate_policy_rollout:
+        rollout_evaluation = _evaluate_bot(
+            bot_name="policy-rollout",
+            eval_opponents=tuple(eval_opponents),
+            eval_hands=eval_hands,
+            seed=seed + 30_000,
+            max_turns=max_turns,
+            model_path=artifacts.model_path,
+            search_simulations=rollout_simulations,
+            search_root_moves=rollout_root_moves,
+            search_rollout_turns=rollout_turns,
+        )
+
+    ladder_bots = ("policy", *tuple(eval_opponents))
+    if evaluate_policy_rollout:
+        ladder_bots = ("policy", "policy-rollout", *tuple(eval_opponents))
 
     ladder_ran = False
     if ladder_hands:
         ladder = run_ladder(
-            ("policy", *tuple(eval_opponents)),
+            ladder_bots,
             hands_per_match=ladder_hands,
             seed=seed + 20_000,
             max_turns=max_turns,
@@ -107,7 +130,7 @@ def run_policy_experiment(
             ladder,
             artifacts.ladder_path,
             config={
-                "bots": ["policy", *tuple(eval_opponents)],
+                "bots": list(ladder_bots),
                 "hands_per_match": ladder_hands,
                 "seed": seed + 20_000,
                 "max_turns": max_turns,
@@ -126,6 +149,7 @@ def run_policy_experiment(
         train_examples=training.train_examples,
         validation_examples=training.validation_examples,
         evaluation=evaluation,
+        rollout_evaluation=rollout_evaluation,
         ladder_ran=ladder_ran,
     )
     _write_metrics(result)
@@ -143,6 +167,10 @@ def run_policy_experiment(
         observation_mode=observation_mode,
         averaged=averaged,
         validation_fraction=validation_fraction,
+        evaluate_policy_rollout=evaluate_policy_rollout,
+        rollout_simulations=rollout_simulations,
+        rollout_root_moves=rollout_root_moves,
+        rollout_turns=rollout_turns,
     )
     return result
 
@@ -164,6 +192,14 @@ def format_experiment_summary(result: ExperimentResult) -> str:
             f"hand_wins {metrics['hand_wins'][0]}-{metrics['hand_wins'][1]} "
             f"margin {metrics['score_margin']:+d}"
         )
+    if result.rollout_evaluation:
+        lines.append("Policy-rollout evaluation:")
+        for opponent, metrics in sorted(result.rollout_evaluation.items()):
+            lines.append(
+                f"  policy-rollout vs {opponent}: score {metrics['score'][0]}-{metrics['score'][1]} "
+                f"hand_wins {metrics['hand_wins'][0]}-{metrics['hand_wins'][1]} "
+                f"margin {metrics['score_margin']:+d}"
+            )
     lines.extend(
         [
             f"Data: {result.artifacts.data_path}",
@@ -176,23 +212,30 @@ def format_experiment_summary(result: ExperimentResult) -> str:
     return "\n".join(lines)
 
 
-def _evaluate_policy(
+def _evaluate_bot(
     *,
+    bot_name: str,
     eval_opponents: tuple[str, ...],
     eval_hands: int,
     seed: int,
     max_turns: int,
     model_path: Path,
+    search_simulations: int | None = None,
+    search_root_moves: int | None = None,
+    search_rollout_turns: int | None = None,
 ) -> dict[str, JsonObject]:
     evaluation: dict[str, JsonObject] = {}
     for index, opponent in enumerate(eval_opponents):
         match = run_match(
-            "policy",
+            bot_name,
             opponent,
             hands=eval_hands,
             seed=seed + 10_000 + index * 101,
             max_turns=max_turns,
             policy_model=str(model_path),
+            search_simulations=search_simulations,
+            search_root_moves=search_root_moves,
+            search_rollout_turns=search_rollout_turns,
         )
         evaluation[opponent] = {
             "hands": len(match.hands),
@@ -220,6 +263,7 @@ def _write_metrics(result: ExperimentResult) -> None:
             "averaged": json.loads(result.artifacts.model_path.read_text(encoding="utf-8")).get("averaged", False),
         },
         "evaluation": result.evaluation,
+        "policy_rollout_evaluation": result.rollout_evaluation,
         "ladder": str(result.artifacts.ladder_path) if result.ladder_ran else None,
     }
     result.artifacts.metrics_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -285,6 +329,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--validation-fraction", type=float, default=0.0, help="Held-out fraction from the end of generated self-play records")
     parser.add_argument("--observation-mode", choices=("perfect", "player"), default="perfect")
     parser.add_argument("--ladder-hands", type=int, default=0, help="If >0, run a policy-vs-opponents ladder with this many hands per ordered matchup")
+    parser.add_argument("--evaluate-policy-rollout", action="store_true", help="Also evaluate policy-rollout using the trained model")
+    parser.add_argument("--rollout-simulations", type=int, default=2, help="Policy-rollout simulations per root move during experiment evaluation")
+    parser.add_argument("--rollout-root-moves", type=int, default=8, help="Policy-rollout root move cap during experiment evaluation")
+    parser.add_argument("--rollout-turns", type=int, default=120, help="Policy-rollout rollout turn cap during experiment evaluation")
     return parser
 
 
@@ -306,6 +354,10 @@ def main(argv: list[str] | None = None) -> int:
         averaged=args.averaged,
         validation_fraction=args.validation_fraction,
         ladder_hands=args.ladder_hands,
+        evaluate_policy_rollout=args.evaluate_policy_rollout,
+        rollout_simulations=args.rollout_simulations,
+        rollout_root_moves=args.rollout_root_moves,
+        rollout_turns=args.rollout_turns,
     )
     print(format_experiment_summary(result))
     return 0

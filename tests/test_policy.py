@@ -108,6 +108,15 @@ class PolicyTrainingTests(unittest.TestCase):
         self.assertEqual(from_record["action.rank"], from_state["action.rank"])
         self.assertEqual(from_record["state.actor_cards"], 2.0)
         self.assertEqual(from_record["state.opponent_cards"], 1.0)
+        self.assertEqual(from_record["action.sheds_hand_fraction"], from_state["action.sheds_hand_fraction"])
+        self.assertEqual(from_record["action.point_fraction"], from_state["action.point_fraction"])
+        self.assertEqual(from_record["state.opponent_hand_points"], from_state["state.opponent_hand_points"])
+        self.assertEqual(from_record["state.hand_point_delta"], from_state["state.hand_point_delta"])
+        self.assertEqual(from_record["state.captured_point_delta"], from_state["state.captured_point_delta"])
+        self.assertEqual(from_record["state.leading"], from_state["state.leading"])
+        self.assertEqual(from_record["state.actor_bet"], from_state["state.actor_bet"])
+        self.assertEqual(from_record["state.opponent_bet"], from_state["state.opponent_bet"])
+        self.assertEqual(from_record["state.bet_delta"], from_state["state.bet_delta"])
 
     def test_training_saves_loads_and_improves_accuracy_on_examples(self):
         with tempfile.TemporaryDirectory() as directory:

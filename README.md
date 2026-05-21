@@ -80,13 +80,17 @@ Available bot names for tournament/ladder commands:
 | `endgame-search` | Perfect-information minimax on small endgame states, heuristic fallback otherwise. |
 | `monte-carlo` | Root rollout search using perfect-information playouts. |
 | `information-set` | Rollout search that samples opponent-hand/haggis determinizations. |
+| `tree-information-set` | Shallow information-set tree search over sampled determinizations; can use `--policy-model` for policy-guided leaf rollouts. |
 | `ucb-information-set` | UCB1 root allocation over information-set determinizations. |
 | `policy` | Loaded linear action-ranking policy model. |
+| `policy-rollout` | Root rollout search using a loaded policy model during simulated playouts. |
 
 Tournaments ask bots for pre-play bets by default. Use `--no-betting` to disable
 this for compatibility experiments.
 
-Search bots accept budget flags in tournament and ladder commands:
+Search bots accept budget flags in tournament and ladder commands. `policy`,
+`policy-rollout`, and `tree-information-set` also use `--policy-model` to load a
+trained model:
 
 ```bash
 --search-simulations 20
@@ -183,6 +187,10 @@ python3 -m haggis.experiment \
   --ladder-hands 5 \
   --eval-opponents greedy,point-aware,bomb-control \
   --observation-mode player \
+  --evaluate-policy-rollout \
+  --rollout-simulations 2 \
+  --rollout-root-moves 6 \
+  --rollout-turns 80 \
   --seed 1
 ```
 
@@ -190,8 +198,13 @@ This writes:
 
 - `self_play.jsonl` — training records;
 - `linear_policy.json` — trained model;
-- `metrics.json` — training and evaluation metrics;
-- `ladder.json` — optional policy-vs-baselines ladder ratings when `--ladder-hands` is set.
+- `metrics.json` — training, direct-policy evaluation, and optional policy-rollout metrics;
+- `ladder.json` — optional policy/policy-rollout-vs-baselines ladder ratings when `--ladder-hands` is set.
+
+A larger local run at `runs/strength-family-pruning/` trained on 80 player-observation
+hands and evaluated `policy-rollout` against the baselines. In that sample,
+`policy-rollout` swept the ladder at 24/24 hand wins with about 0.12s/decision at
+`--rollout-root-moves 6 --rollout-turns 80`.
 
 ## Architecture map
 
@@ -220,10 +233,8 @@ seeded small hands, including bombs, wilds, and sequences.
 
 ## Roadmap
 
-Good next steps:
+Remaining useful next steps:
 
-1. Add stronger policy/value features and compare experiments via ladder JSON.
-2. Train larger averaged policies from `player` observation self-play.
-3. Replace root-only information-set search with a deeper ISMCTS tree.
-4. Add value-guided rollout/search using the trained policy model.
-5. Profile legal move/search hotspots and optimize once strength experiments need scale.
+1. Mature the shallow `tree-information-set` prototype into fuller ISMCTS with deeper reusable child nodes.
+2. Add more evaluation runs against stronger/search opponents and tune policy-rollout/tree-search budgets.
+3. Continue profiling sequence generation if larger ladders need more throughput.

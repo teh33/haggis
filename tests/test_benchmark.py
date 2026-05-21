@@ -73,6 +73,43 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(metrics["config"]["bots"], ["random", "greedy"])
         self.assertEqual(metrics["config"]["states"], 1)
         self.assertEqual(metrics["config"]["seed"], 7)
+    def test_benchmark_cli_accepts_policy_model_for_policy_bots(self):
+        from pathlib import Path
+
+        from haggis.policy import LinearPolicy
+
+        stdout = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "policy.json"
+            output_path = Path(directory) / "benchmark.json"
+            LinearPolicy(weights={"action.card_count": 1.0}).save(model_path)
+
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "--bots",
+                        "policy,policy-rollout",
+                        "--states",
+                        "1",
+                        "--seed",
+                        "8",
+                        "--policy-model",
+                        str(model_path),
+                        "--search-simulations",
+                        "1",
+                        "--search-root-moves",
+                        "3",
+                        "--search-rollout-turns",
+                        "8",
+                        "--output-json",
+                        str(output_path),
+                    ]
+                )
+            metrics = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(metrics["config"]["policy_model"], str(model_path))
+        self.assertEqual([bot["bot"] for bot in metrics["bots"]], ["policy", "policy-rollout"])
 
 
 if __name__ == "__main__":

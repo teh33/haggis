@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 
 from haggis.tournament import (
     BOT_TYPES,
@@ -22,7 +23,7 @@ from haggis.tournament import (
     tournament_to_metrics,
     write_metrics,
 )
-from haggis.bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, UCBInformationSetBot
+from haggis.bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyRolloutBot, UCBInformationSetBot
 from haggis import HaggisState
 from haggis import tournament
 
@@ -239,6 +240,45 @@ class TournamentTests(unittest.TestCase):
         self.assertEqual(ucb.simulations, 7)
         self.assertEqual(ucb.max_root_moves, 4)
         self.assertEqual(ucb.max_rollout_turns, 80)
+
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "policy.json"
+            from haggis.policy import LinearPolicy
+
+            LinearPolicy(weights={"action.card_count": 1.0}).save(model_path)
+            policy_rollout = make_bot(
+                "policy-rollout",
+                seed=1,
+                policy_model=str(model_path),
+                search_simulations=3,
+                search_root_moves=4,
+                search_rollout_turns=50,
+            )
+
+        self.assertEqual(policy_rollout.simulations_per_move, 3)
+        self.assertEqual(policy_rollout.max_root_moves, 4)
+        self.assertEqual(policy_rollout.max_rollout_turns, 50)
+
+        tree = make_bot(
+            "tree-information-set",
+            seed=1,
+            search_simulations=6,
+            search_root_moves=5,
+            search_rollout_turns=60,
+        )
+
+        self.assertEqual(tree.simulations, 6)
+        self.assertEqual(tree.max_root_moves, 5)
+        self.assertEqual(tree.max_rollout_turns, 60)
+
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "policy.json"
+            from haggis.policy import LinearPolicy
+
+            LinearPolicy(weights={"action.card_count": 1.0}).save(model_path)
+            policy_tree = make_bot("tree-information-set", seed=1, policy_model=str(model_path))
+
+        self.assertIsNotNone(policy_tree.policy)
 
     def test_tournament_cli_accepts_search_budget_flags(self):
         output = io.StringIO()

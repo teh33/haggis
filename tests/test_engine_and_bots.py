@@ -10,6 +10,8 @@ from haggis import (
     InformationSetRolloutBot,
     MonteCarloRolloutBot,
     Move,
+    PolicyRolloutBot,
+    TreeInformationSetBot,
     UCBInformationSetBot,
     PointAwareBot,
     RandomBot,
@@ -270,6 +272,41 @@ class EngineAndBotTests(unittest.TestCase):
 
         self.assertIn(move, state.legal_moves())
 
+    def test_policy_rollout_bot_uses_policy_model_for_playable_rollouts(self):
+        import tempfile
+        from pathlib import Path
+
+        from haggis.policy import LinearPolicy
+
+        with tempfile.TemporaryDirectory() as directory:
+            model_path = Path(directory) / "policy.json"
+            LinearPolicy(weights={"action.card_count": 1.0}).save(model_path)
+            state = HaggisState(hands=((c(7), c(8), c(9)), (c(3), c(4))), haggis=(c(5),), current_player=0)
+            bot = PolicyRolloutBot(model_path, seed=3, simulations_per_move=1, max_root_moves=3, max_rollout_turns=8)
+
+            move = bot.choose_move(state)
+
+        self.assertIn(move, state.legal_moves())
+
+    def test_tree_information_set_bot_returns_playable_move(self):
+        state = HaggisState(hands=((c(7), c(8), c(9), c(10)), (c(3), c(4), c(5))), haggis=(c(6),), current_player=0)
+        bot = TreeInformationSetBot(seed=5, simulations=4, max_root_moves=3, max_child_moves=2, max_rollout_turns=8)
+
+        move = bot.choose_move(state)
+
+        self.assertIn(move, state.legal_moves())
+
+    def test_tree_information_set_search_visits_root_candidates(self):
+        state = HaggisState(hands=((c(7), c(8), c(9), c(10)), (c(3), c(4), c(5))), haggis=(c(6),), current_player=0)
+        bot = TreeInformationSetBot(seed=5, simulations=4, max_root_moves=3, max_child_moves=2, max_rollout_turns=8)
+
+        root_moves, visits, values = bot.search_root(state)
+
+        self.assertEqual(len(root_moves), len(visits))
+        self.assertEqual(len(root_moves), len(values))
+        self.assertGreaterEqual(sum(visits), len(root_moves))
+        self.assertTrue(all(visit_count >= 1 for visit_count in visits))
+
     def test_ucb_information_set_search_visits_each_root_candidate(self):
         state = HaggisState(hands=((c(7), c(8), c(9), c(10)), (c(3), c(4), c(5))), haggis=(c(6),), current_player=0)
         bot = UCBInformationSetBot(seed=5, simulations=3, max_root_moves=4)
@@ -280,7 +317,6 @@ class EngineAndBotTests(unittest.TestCase):
         self.assertEqual(len(root_moves), len(values))
         self.assertGreaterEqual(sum(visits), len(root_moves))
         self.assertTrue(all(visit_count >= 1 for visit_count in visits))
-
 
 if __name__ == "__main__":
     unittest.main()

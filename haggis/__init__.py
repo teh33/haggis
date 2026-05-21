@@ -1,4 +1,4 @@
-from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, RandomBot, UCBInformationSetBot
+from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TreeInformationSetBot, UCBInformationSetBot
 from .cards import Card, Deal, Rank, Suit, deal, player_wilds, point_total, standard_deck
 from .combinations import Combination, CombinationType, can_beat, validate_combination
 from .engine import HaggisState, HandScore, InvariantError, InvariantReport, Move, legal_moves
@@ -20,9 +20,11 @@ __all__ = [
     "MonteCarloRolloutBot",
     "PointAwareBot",
     "PolicyBot",
+    "PolicyRolloutBot",
     "RandomBot",
     "Rank",
     "Suit",
+    "TreeInformationSetBot",
     "UCBInformationSetBot",
     "can_beat",
     "deal",

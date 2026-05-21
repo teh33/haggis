@@ -12,7 +12,7 @@ from .engine import HaggisState, Move
 JsonObject = dict[str, Any]
 FeatureVector = dict[str, float]
 
-FEATURE_VERSION = 1
+FEATURE_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -237,30 +237,52 @@ def features_from_record_action(record: JsonObject, action: JsonObject) -> Featu
     captured_points = state["captured_points"]
     last_combination = state.get("last_combination")
 
+    actor_cards = float(hand_sizes[acting_player])
+    opponent_cards = float(hand_sizes[opponent])
+    action_cards = float(len(action.get("cards", [])))
+    action_points = float(action.get("point_risk", 0))
+    actor_hand_points = float(_visible_hand_points(state, acting_player))
+    opponent_hand_points = float(_visible_hand_points(state, opponent))
+    actor_captured_points = float(captured_points[acting_player])
+    opponent_captured_points = float(captured_points[opponent])
+    trick_points = float(state.get("trick_points", 0))
+    bets = state.get("bets", [0, 0])
+    actor_bet = float(bets[acting_player]) if len(bets) > acting_player else 0.0
+    opponent_bet = float(bets[opponent]) if len(bets) > opponent else 0.0
+
     features: FeatureVector = {
         "bias": 1.0,
         "actor_is_player_0": _bool(acting_player == 0),
         "action.index": float(action.get("index", 0)),
         "action.neg_index": -float(action.get("index", 0)),
         "action.pass": _bool(action.get("is_pass", False)),
-        "action.card_count": float(len(action.get("cards", []))),
-        "action.point_risk": float(action.get("point_risk", 0)),
+        "action.card_count": action_cards,
+        "action.point_risk": action_points,
         "action.wild_count": float(_card_ids_wild_count(action.get("cards", []))),
-        "action.empties_hand": _bool(len(action.get("cards", [])) == hand_sizes[acting_player]),
-        "action.remaining_cards": float(hand_sizes[acting_player] - len(action.get("cards", []))),
-        "action.remaining_points": float(
-            _visible_hand_points(state, acting_player) - float(action.get("point_risk", 0))
-        ),
-        "state.actor_hand_points": float(_visible_hand_points(state, acting_player)),
+        "action.empties_hand": _bool(action_cards == actor_cards),
+        "action.remaining_cards": actor_cards - action_cards,
+        "action.remaining_points": actor_hand_points - action_points,
+        "action.sheds_hand_fraction": _safe_div(action_cards, actor_cards),
+        "action.point_fraction": _safe_div(action_points, actor_hand_points),
+        "state.actor_hand_points": actor_hand_points,
+        "state.opponent_hand_points": opponent_hand_points,
+        "state.hand_point_delta": opponent_hand_points - actor_hand_points,
         "state.actor_wild_count": float(_visible_hand_wild_count(state, acting_player)),
-        "state.actor_cards": float(hand_sizes[acting_player]),
-        "state.opponent_cards": float(hand_sizes[opponent]),
-        "state.card_delta": float(hand_sizes[opponent] - hand_sizes[acting_player]),
-        "state.actor_captured_points": float(captured_points[acting_player]),
-        "state.opponent_captured_points": float(captured_points[opponent]),
-        "state.trick_points": float(state.get("trick_points", 0)),
+        "state.actor_cards": actor_cards,
+        "state.opponent_cards": opponent_cards,
+        "state.card_delta": opponent_cards - actor_cards,
+        "state.actor_captured_points": actor_captured_points,
+        "state.opponent_captured_points": opponent_captured_points,
+        "state.captured_point_delta": actor_captured_points - opponent_captured_points,
+        "state.trick_points": trick_points,
         "state.haggis_points": float(state.get("haggis_points") or 0),
         "state.responding": _bool(last_combination is not None),
+        "state.leading": _bool(last_combination is None),
+        "state.actor_bet": actor_bet,
+        "state.opponent_bet": opponent_bet,
+        "state.bet_delta": actor_bet - opponent_bet,
+        "state.actor_has_played": _bool(_indexed_bool(state.get("has_played", []), acting_player)),
+        "state.opponent_has_played": _bool(_indexed_bool(state.get("has_played", []), opponent)),
     }
     _add_combination_features(features, "action", combination)
     _add_combination_features(features, "last", last_combination)
@@ -270,30 +292,49 @@ def features_from_record_action(record: JsonObject, action: JsonObject) -> Featu
 def features_from_state_action(state: HaggisState, move: Move, *, action_index: int = 0) -> FeatureVector:
     player = state.current_player
     opponent = 1 - player
+    actor_cards = float(len(state.hands[player]))
+    opponent_cards = float(len(state.hands[opponent]))
+    action_cards = float(len(move.cards))
+    action_points = float(sum(card.points for card in move.cards))
+    actor_hand_points = float(sum(card.points for card in state.hands[player]))
+    opponent_hand_points = float(sum(card.points for card in state.hands[opponent]))
+    actor_captured_points = float(sum(card.points for card in state.captured[player]))
+    opponent_captured_points = float(sum(card.points for card in state.captured[opponent]))
+    trick_points = float(sum(card.points for card in state.trick_cards))
+
     features: FeatureVector = {
         "bias": 1.0,
         "actor_is_player_0": _bool(player == 0),
         "action.index": float(action_index),
         "action.neg_index": -float(action_index),
         "action.pass": _bool(move.is_pass),
-        "action.card_count": float(len(move.cards)),
-        "action.point_risk": float(sum(card.points for card in move.cards)),
+        "action.card_count": action_cards,
+        "action.point_risk": action_points,
         "action.wild_count": float(sum(1 for card in move.cards if card.is_wild)),
-        "action.empties_hand": _bool(len(move.cards) == len(state.hands[player])),
-        "action.remaining_cards": float(len(state.hands[player]) - len(move.cards)),
-        "action.remaining_points": float(
-            sum(card.points for card in state.hands[player]) - sum(card.points for card in move.cards)
-        ),
-        "state.actor_hand_points": float(sum(card.points for card in state.hands[player])),
+        "action.empties_hand": _bool(action_cards == actor_cards),
+        "action.remaining_cards": actor_cards - action_cards,
+        "action.remaining_points": actor_hand_points - action_points,
+        "action.sheds_hand_fraction": _safe_div(action_cards, actor_cards),
+        "action.point_fraction": _safe_div(action_points, actor_hand_points),
+        "state.actor_hand_points": actor_hand_points,
+        "state.opponent_hand_points": opponent_hand_points,
+        "state.hand_point_delta": opponent_hand_points - actor_hand_points,
         "state.actor_wild_count": float(sum(1 for card in state.hands[player] if card.is_wild)),
-        "state.actor_cards": float(len(state.hands[player])),
-        "state.opponent_cards": float(len(state.hands[opponent])),
-        "state.card_delta": float(len(state.hands[opponent]) - len(state.hands[player])),
-        "state.actor_captured_points": float(sum(card.points for card in state.captured[player])),
-        "state.opponent_captured_points": float(sum(card.points for card in state.captured[opponent])),
-        "state.trick_points": float(sum(card.points for card in state.trick_cards)),
+        "state.actor_cards": actor_cards,
+        "state.opponent_cards": opponent_cards,
+        "state.card_delta": opponent_cards - actor_cards,
+        "state.actor_captured_points": actor_captured_points,
+        "state.opponent_captured_points": opponent_captured_points,
+        "state.captured_point_delta": actor_captured_points - opponent_captured_points,
+        "state.trick_points": trick_points,
         "state.haggis_points": float(sum(card.points for card in state.haggis)),
         "state.responding": _bool(state.last_combination is not None),
+        "state.leading": _bool(state.last_combination is None),
+        "state.actor_bet": float(state.bets[player]),
+        "state.opponent_bet": float(state.bets[opponent]),
+        "state.bet_delta": float(state.bets[player] - state.bets[opponent]),
+        "state.actor_has_played": _bool(state.has_played[player]),
+        "state.opponent_has_played": _bool(state.has_played[opponent]),
     }
     _add_combination_features(features, "action", _combination_payload(move.combination))
     _add_combination_features(features, "last", _combination_payload(state.last_combination))
@@ -370,6 +411,14 @@ def _validate_record(record: JsonObject, line_number: int) -> None:
     legal_count = len(record["legal_actions"])
     if not 0 <= selected < legal_count:
         raise ValueError(f"line {line_number}: selected_action_index out of range")
+
+
+def _safe_div(numerator: float, denominator: float) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def _indexed_bool(values: list[Any], index: int) -> bool:
+    return bool(values[index]) if len(values) > index else False
 
 
 def _bool(value: bool) -> float:

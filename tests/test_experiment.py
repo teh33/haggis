@@ -24,6 +24,10 @@ class ExperimentTests(unittest.TestCase):
                 averaged=True,
                 validation_fraction=0.25,
                 ladder_hands=1,
+                evaluate_policy_rollout=True,
+                rollout_simulations=1,
+                rollout_root_moves=3,
+                rollout_turns=10,
             )
 
             data_lines = result.artifacts.data_path.read_text(encoding="utf-8").splitlines()
@@ -37,6 +41,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(model["model_type"], "linear_action_ranker")
         self.assertEqual(metrics["records"], result.records)
         self.assertIn("greedy", metrics["evaluation"])
+        self.assertIn("greedy", metrics["policy_rollout_evaluation"])
         self.assertEqual(manifest["experiment"], "linear_policy_imitation")
         self.assertEqual(manifest["config"]["teacher_a"], "point-aware")
         self.assertEqual(manifest["config"]["observation_mode"], "player")
@@ -52,9 +57,9 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(manifest["artifacts"]["data"], str(result.artifacts.data_path))
         self.assertEqual(manifest["artifacts"]["ladder"], str(result.artifacts.ladder_path))
         self.assertTrue(manifest["summary"]["ladder_ran"])
-        self.assertEqual(ladder["config"]["bots"], ["policy", "greedy"])
+        self.assertEqual(ladder["config"]["bots"], ["policy", "policy-rollout", "greedy"])
         self.assertEqual(ladder["config"]["hands_per_match"], 1)
-        self.assertEqual(len(ladder["standings"]), 2)
+        self.assertEqual(len(ladder["standings"]), 3)
         self.assertEqual(json.loads(data_lines[0])["observation_mode"], "player")
 
     def test_format_experiment_summary_lists_artifacts_and_evaluation(self):
@@ -73,6 +78,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertIn("Haggis policy experiment", summary)
         self.assertIn("Records:", summary)
         self.assertIn("policy vs greedy", summary)
+        self.assertNotIn("Policy-rollout evaluation:", summary)
         self.assertIn("Data:", summary)
         self.assertIn("Model:", summary)
         self.assertIn("Metrics:", summary)
@@ -103,6 +109,13 @@ class ExperimentTests(unittest.TestCase):
                         "0.25",
                         "--ladder-hands",
                         "1",
+                        "--evaluate-policy-rollout",
+                        "--rollout-simulations",
+                        "1",
+                        "--rollout-root-moves",
+                        "3",
+                        "--rollout-turns",
+                        "10",
                         "--seed",
                         "5",
                     ]
@@ -127,9 +140,9 @@ class ExperimentTests(unittest.TestCase):
         self.assertGreater(metrics["training"]["validation_examples"], 0)
         self.assertIsNotNone(metrics["training"]["validation_accuracy"])
         self.assertEqual(metrics["ladder"], str(output / "ladder.json"))
-        self.assertEqual(ladder["config"]["bots"], ["policy", "greedy"])
+        self.assertEqual(ladder["config"]["bots"], ["policy", "policy-rollout", "greedy"])
         self.assertEqual(ladder["config"]["hands_per_match"], 1)
-        self.assertEqual(len(ladder["standings"]), 2)
+        self.assertEqual(len(ladder["standings"]), 3)
 
 
 if __name__ == "__main__":

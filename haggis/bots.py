@@ -203,6 +203,135 @@ class UCBInformationSetBot:
         )
 
 
+class TreeInformationSetBot:
+    """Shallow information-set tree search over sampled determinizations."""
+
+    def __init__(
+        self,
+        simulations: int = 8,
+        seed: int | None = None,
+        exploration: float = 1.4,
+        max_depth: int = 2,
+        max_rollout_turns: int = 80,
+        max_root_moves: int = 4,
+        max_child_moves: int = 4,
+        model_path: str | Path | None = None,
+    ):
+        if simulations < 1:
+            raise ValueError("simulations must be at least 1")
+        if exploration < 0:
+            raise ValueError("exploration must be non-negative")
+        if max_depth < 1:
+            raise ValueError("max_depth must be at least 1")
+        if max_rollout_turns < 1:
+            raise ValueError("max_rollout_turns must be at least 1")
+        if max_root_moves < 1:
+            raise ValueError("max_root_moves must be at least 1")
+        if max_child_moves < 1:
+            raise ValueError("max_child_moves must be at least 1")
+        self.simulations = simulations
+        self.rng = Random(seed)
+        self.exploration = exploration
+        self.max_depth = max_depth
+        self.max_rollout_turns = max_rollout_turns
+        self.max_root_moves = max_root_moves
+        self.max_child_moves = max_child_moves
+        self.policy = None
+        if model_path is not None:
+            from .policy import LinearPolicy
+
+            self.policy = LinearPolicy.load(model_path)
+
+    def choose_bet(self, state: HaggisState, player: int) -> int:
+        return _bet_amount_for_hand(state.hands[player], aggression=2)
+
+    def choose_move(self, state: HaggisState) -> Move:
+        legal_moves = state.legal_moves()
+        if not legal_moves:
+            raise ValueError("no legal moves available")
+
+        player = state.current_player
+        playable = [move for move in legal_moves if not move.is_pass]
+        immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
+        if immediate_wins:
+            return min(immediate_wins, key=_low_commitment_key)
+
+        root_moves, visits, values = self.search_root(state)
+        scored = [
+            (values[index] / visits[index], visits[index], _search_tiebreak_key(move), move)
+            for index, move in enumerate(root_moves)
+        ]
+        return max(scored, key=lambda item: (item[0], item[1], item[2]))[3]
+
+    def search_root(self, state: HaggisState) -> tuple[tuple[Move, ...], list[int], list[float]]:
+        legal_moves = state.legal_moves()
+        if not legal_moves:
+            raise ValueError("no legal moves available")
+
+        root_player = state.current_player
+        root_moves = _root_candidates(state, legal_moves, min(self.max_root_moves, self.simulations))
+        visits = [0 for _ in root_moves]
+        values = [0.0 for _ in root_moves]
+        children: list[dict[Move, list[float]]] = [{} for _ in root_moves]
+
+        for simulation_index in range(max(self.simulations, len(root_moves))):
+            move_index = self._select_index(visits, values, simulation_index + 1)
+            move = root_moves[move_index]
+            determinized = sample_determinization(state, self.rng)
+            next_state = determinized.apply_move(move)
+            value = self._tree_value(next_state, root_player, depth=self.max_depth - 1, node=children[move_index])
+            visits[move_index] += 1
+            values[move_index] += value
+
+        return root_moves, visits, values
+
+    def _tree_value(self, state: HaggisState, root_player: int, *, depth: int, node: dict[Move, list[float]]) -> float:
+        if state.hand_winner is not None:
+            score = state.score_hand().points
+            return float(score[root_player] - score[1 - root_player])
+        if depth <= 0:
+            return _rollout_value(state, root_player, self.rng, self.max_rollout_turns, rollout_policy=self.policy)
+
+        legal_moves = _root_candidates(state, state.legal_moves(), self.max_child_moves)
+        if not legal_moves:
+            return float(_static_value(state, root_player))
+        for move in legal_moves:
+            node.setdefault(move, [0.0, 0.0])
+
+        total_visits = int(sum(stats[0] for stats in node.values())) + 1
+        move = max(legal_moves, key=lambda candidate: self._tree_score(node[candidate], total_visits, state.current_player == root_player, candidate))
+        child_state = state.apply_move(move)
+        value = _rollout_value(child_state, root_player, self.rng, self.max_rollout_turns, rollout_policy=self.policy)
+        stats = node[move]
+        stats[0] += 1.0
+        stats[1] += value
+        return value
+
+    def _tree_score(self, stats: list[float], total_visits: int, maximizing: bool, move: Move) -> tuple[float, tuple[int, int, int, int, tuple[str, ...]]]:
+        visits, value_sum = stats
+        if visits == 0:
+            mean = float("inf") if maximizing else float("-inf")
+        else:
+            mean = value_sum / visits
+            if not maximizing:
+                mean = -mean
+            mean += self.exploration * sqrt(log(max(total_visits, 2)) / visits)
+        return (mean, _search_tiebreak_key(move))
+
+    def _select_index(self, visits: list[int], values: list[float], total_visits: int) -> int:
+        for index, visit_count in enumerate(visits):
+            if visit_count == 0:
+                return index
+
+        log_total = log(max(total_visits, 2))
+        scores = []
+        for index, visit_count in enumerate(visits):
+            exploitation = values[index] / visit_count
+            exploration = self.exploration * sqrt(log_total / visit_count)
+            scores.append((exploitation + exploration, -index, index))
+        return max(scores)[2]
+
+
 class InformationSetRolloutBot:
     """Hidden-information rollout bot using sampled determinizations.
 
@@ -331,6 +460,66 @@ class MonteCarloRolloutBot:
         return max(scored, key=lambda item: (item[0], item[1]))[2]
 
 
+class PolicyRolloutBot:
+    """Search bot that uses a trained linear policy for rollout move selection.
+
+    Policy-guided rollouts are deterministic, so each root candidate needs only
+    one playout regardless of the configured simulation budget.
+    """
+
+    def __init__(
+        self,
+        model_path: str | Path = "models/linear_policy.json",
+        simulations_per_move: int = 2,
+        seed: int | None = None,
+        max_rollout_turns: int = 120,
+        max_root_moves: int = 8,
+    ):
+        if simulations_per_move < 1:
+            raise ValueError("simulations_per_move must be at least 1")
+        if max_rollout_turns < 1:
+            raise ValueError("max_rollout_turns must be at least 1")
+        if max_root_moves < 1:
+            raise ValueError("max_root_moves must be at least 1")
+        from .policy import LinearPolicy
+
+        self.model_path = Path(model_path)
+        self.policy = LinearPolicy.load(self.model_path)
+        self.simulations_per_move = simulations_per_move
+        self.rng = Random(seed)
+        self.max_rollout_turns = max_rollout_turns
+        self.max_root_moves = max_root_moves
+
+    def choose_bet(self, state: HaggisState, player: int) -> int:
+        return _bet_amount_for_hand(state.hands[player], aggression=2)
+
+    def choose_move(self, state: HaggisState) -> Move:
+        legal_moves = state.legal_moves()
+        if not legal_moves:
+            raise ValueError("no legal moves available")
+
+        player = state.current_player
+        playable = [move for move in legal_moves if not move.is_pass]
+        immediate_wins = [move for move in playable if len(move.cards) == len(state.hands[player])]
+        if immediate_wins:
+            return min(immediate_wins, key=_low_commitment_key)
+
+        root_moves = _root_candidates(state, legal_moves, self.max_root_moves)
+        scored: list[tuple[float, tuple[int, int, int, int, tuple[str, ...]], Move]] = []
+        for move in root_moves:
+            next_state = state.apply_move(move)
+            value = _rollout_value(
+                next_state,
+                player,
+                self.rng,
+                self.max_rollout_turns,
+                rollout_policy=self.policy,
+            )
+            scored.append((value, _search_tiebreak_key(move), move))
+
+        return max(scored, key=lambda item: (item[0], item[1]))[2]
+
+
 class PolicyBot:
     """Bot backed by a saved linear action-ranking policy model."""
 
@@ -424,6 +613,31 @@ def _bet_amount_for_hand(hand: tuple[Card, ...], *, aggression: int) -> int:
     return 0
 
 
+def sample_determinization(state: HaggisState, rng: Random) -> HaggisState:
+    player = state.current_player
+    opponent = 1 - player
+    unknown_pool = list(sorted((*state.hands[opponent], *state.haggis)))
+    rng.shuffle(unknown_pool)
+
+    opponent_count = len(state.hands[opponent])
+    sampled_opponent = tuple(sorted(unknown_pool[:opponent_count]))
+    sampled_haggis = tuple(sorted(unknown_pool[opponent_count:]))
+    hands = list(state.hands)
+    hands[opponent] = sampled_opponent
+    return HaggisState(
+        hands=tuple(hands),
+        haggis=sampled_haggis,
+        captured=state.captured,
+        current_player=state.current_player,
+        last_combination=state.last_combination,
+        last_player=state.last_player,
+        trick_cards=state.trick_cards,
+        bets=state.bets,
+        has_played=state.has_played,
+        hand_winner=state.hand_winner,
+    )
+
+
 def _root_candidates(state: HaggisState, legal_moves: tuple[Move, ...], max_root_moves: int) -> tuple[Move, ...]:
     if len(legal_moves) <= max_root_moves:
         return legal_moves
@@ -438,10 +652,17 @@ def _root_candidates(state: HaggisState, legal_moves: tuple[Move, ...], max_root
     return tuple(candidates)
 
 
-def _rollout_value(state: HaggisState, root_player: int, rng: Random, max_rollout_turns: int) -> float:
+def _rollout_value(
+    state: HaggisState,
+    root_player: int,
+    rng: Random,
+    max_rollout_turns: int,
+    *,
+    rollout_policy: object | None = None,
+) -> float:
     turns = 0
     while state.hand_winner is None and turns < max_rollout_turns:
-        move = _choose_rollout_move(state, rng)
+        move = _choose_rollout_move(state, rng, rollout_policy=rollout_policy)
         state = state.apply_move(move)
         turns += 1
 
@@ -451,7 +672,7 @@ def _rollout_value(state: HaggisState, root_player: int, rng: Random, max_rollou
     return float(_static_value(state, root_player))
 
 
-def _choose_rollout_move(state: HaggisState, rng: Random) -> Move:
+def _choose_rollout_move(state: HaggisState, rng: Random, *, rollout_policy: object | None = None) -> Move:
     legal_moves = state.legal_moves()
     playable = [move for move in legal_moves if not move.is_pass]
     if not playable:
@@ -461,6 +682,9 @@ def _choose_rollout_move(state: HaggisState, rng: Random) -> Move:
     winning_moves = [move for move in playable if len(move.cards) == hand_size]
     if winning_moves:
         return min(winning_moves, key=_low_commitment_key)
+
+    if rollout_policy is not None:
+        return rollout_policy.choose_move(state, tuple(playable))  # type: ignore[attr-defined]
 
     ranked = sorted(playable, key=lambda move: _point_aware_key(move, hand_size))
     top_count = min(3, len(ranked))

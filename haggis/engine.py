@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from itertools import combinations
 from collections import Counter
+from functools import lru_cache
 
 from .cards import Card, Deal, Hand, deal as deal_cards, player_wilds, point_total, standard_deck
 from .combinations import Combination, CombinationType, can_beat, validate_combination
@@ -214,8 +215,15 @@ class HaggisState:
 
 
 def legal_moves(hand: Hand, previous: Combination | None = None) -> tuple[Move, ...]:
+    return _legal_moves_cached(tuple(sorted(hand)), previous)
+
+
+@lru_cache(maxsize=50_000)
+def _legal_moves_cached(hand: Hand, previous: Combination | None = None) -> tuple[Move, ...]:
     moves: dict[tuple, Move] = {}
-    for cards in _candidate_card_sets(hand):
+    for cards in _candidate_card_sets(hand, previous):
+        if not _could_beat_previous_by_size(cards, previous):
+            continue
         combination = validate_combination(cards)
         if combination is None or not can_beat(combination, previous):
             continue
@@ -235,23 +243,36 @@ def legal_moves(hand: Hand, previous: Combination | None = None) -> tuple[Move, 
     return tuple(ordered)
 
 
-def _candidate_card_sets(hand: Hand) -> tuple[tuple[Card, ...], ...]:
+def _could_beat_previous_by_size(cards: tuple[Card, ...], previous: Combination | None) -> bool:
+    if previous is None:
+        return True
+    if previous.type == CombinationType.BOMB:
+        return len(cards) in (2, 3, 4)
+    return len(cards) == previous.card_count or len(cards) in (2, 3, 4)
+
+
+def _candidate_card_sets(hand: Hand, previous: Combination | None = None) -> tuple[tuple[Card, ...], ...]:
     """Generate plausible legal card groups without enumerating every subset.
 
     A full 17-card hand has 131k subsets; doing that every turn makes simulation
     unusably slow. Haggis combinations have narrow structure, so generate sets,
     sequences, and bombs directly and let `validate_combination` remain the final
-    authority.
+    authority. When responding to a trick, skip whole candidate families that
+    cannot possibly beat the previous combination.
     """
     candidates: set[tuple[Card, ...]] = set()
-    candidates.update(_set_candidates(hand))
+    if previous is None or previous.type == CombinationType.SET:
+        candidates.update(_set_candidates(hand, card_count=previous.card_count if previous else None))
+    if previous is None or previous.type == CombinationType.SEQUENCE:
+        candidates.update(_sequence_candidates(hand, card_count=previous.card_count if previous else None))
     candidates.update(_bomb_candidates(hand))
-    candidates.update(_sequence_candidates(hand))
     return tuple(sorted(candidates, key=lambda cards: (len(cards), tuple(card.short_name() for card in cards))))
 
 
-def _set_candidates(hand: Hand) -> set[tuple[Card, ...]]:
-    candidates: set[tuple[Card, ...]] = {(card,) for card in hand}
+def _set_candidates(hand: Hand, *, card_count: int | None = None) -> set[tuple[Card, ...]]:
+    candidates: set[tuple[Card, ...]] = set()
+    if card_count in (None, 1):
+        candidates.update((card,) for card in hand)
     naturals = [card for card in hand if not card.is_wild]
     wilds = [card for card in hand if card.is_wild]
 
@@ -261,10 +282,15 @@ def _set_candidates(hand: Hand) -> set[tuple[Card, ...]]:
         if not same_rank:
             continue
 
-        for natural_count in range(1, len(same_rank) + 1):
+        min_natural_count = 1 if card_count is None else max(1, card_count - len(compatible_wilds))
+        max_natural_count = len(same_rank) if card_count is None else min(len(same_rank), card_count)
+        for natural_count in range(min_natural_count, max_natural_count + 1):
             for natural_cards in combinations(same_rank, natural_count):
                 max_wild_count = min(len(compatible_wilds), 7 - natural_count)
-                for wild_count in range(0, max_wild_count + 1):
+                wild_counts = range(0, max_wild_count + 1) if card_count is None else (card_count - natural_count,)
+                for wild_count in wild_counts:
+                    if not 0 <= wild_count <= max_wild_count:
+                        continue
                     for wild_cards in combinations(compatible_wilds, wild_count):
                         candidates.add(tuple(sorted((*natural_cards, *wild_cards))))
 
@@ -306,7 +332,7 @@ def _natural_3579_bombs(hand: Hand, *, same_suit: bool) -> list[tuple[Card, ...]
     return bombs
 
 
-def _sequence_candidates(hand: Hand) -> set[tuple[Card, ...]]:
+def _sequence_candidates(hand: Hand, *, card_count: int | None = None) -> set[tuple[Card, ...]]:
     candidates: set[tuple[Card, ...]] = set()
     naturals = [card for card in hand if not card.is_wild]
     wilds = [card for card in hand if card.is_wild]
@@ -317,7 +343,7 @@ def _sequence_candidates(hand: Hand) -> set[tuple[Card, ...]]:
         max_length = min(11, len(hand) // width)
         for length in range(min_length, max_length + 1):
             total_cards = width * length
-            if total_cards > len(hand):
+            if total_cards > len(hand) or (card_count is not None and total_cards != card_count):
                 continue
             for start_rank in range(2, 13 - length + 1):
                 ranks = tuple(range(start_rank, start_rank + length))

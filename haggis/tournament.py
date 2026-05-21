@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, RandomBot, UCBInformationSetBot
+from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TreeInformationSetBot, UCBInformationSetBot
 from .combinations import CombinationType
 from .engine import HaggisState, Move
 
@@ -145,7 +145,9 @@ BOT_TYPES = {
     "monte-carlo": MonteCarloRolloutBot,
     "point-aware": PointAwareBot,
     "policy": PolicyBot,
+    "policy-rollout": PolicyRolloutBot,
     "random": RandomBot,
+    "tree-information-set": TreeInformationSetBot,
     "ucb-information-set": UCBInformationSetBot,
 }
 
@@ -187,8 +189,24 @@ def make_bot(
             max_root_moves=search_root_moves or 3,
             max_rollout_turns=search_rollout_turns or 80,
         )
+    if bot_type is TreeInformationSetBot:
+        return TreeInformationSetBot(
+            seed=seed,
+            simulations=search_simulations or 4,
+            max_root_moves=search_root_moves or 4,
+            max_rollout_turns=search_rollout_turns or 80,
+            model_path=policy_model,
+        )
     if bot_type is PolicyBot:
         return PolicyBot(model_path=policy_model or "models/linear_policy.json")
+    if bot_type is PolicyRolloutBot:
+        return PolicyRolloutBot(
+            model_path=policy_model or "models/linear_policy.json",
+            seed=seed,
+            simulations_per_move=search_simulations or 2,
+            max_root_moves=search_root_moves or 8,
+            max_rollout_turns=search_rollout_turns or 120,
+        )
     return bot_type()
 
 
