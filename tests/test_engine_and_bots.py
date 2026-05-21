@@ -66,7 +66,7 @@ class EngineAndBotTests(unittest.TestCase):
         self.assertEqual(state.hand_winner, 0)
         self.assertEqual(state.captured[1], jq_bomb)
 
-    def test_score_hand_counts_loser_cards_points_haggis_captures_and_bets(self):
+    def test_score_hand_counts_captured_points_leftover_cards_and_bets(self):
         state = HaggisState(
             hands=((), (c(3), c(4), c(13, wild=True))),
             haggis=(c(5),),
@@ -77,8 +77,35 @@ class EngineAndBotTests(unittest.TestCase):
 
         score = state.score_hand()
 
-        # Winner: 3 loser cards * 5 + own captured 9 + loser hand points 3/K + haggis 5 + own bet + failed opponent bet.
-        self.assertEqual(score.points, (15 + 1 + 6 + 1 + 15 + 30, 1))
+        # Winner: 3 loser cards * 5 + own captured 9 + successful own 15 bet + failed opponent 30 bet.
+        # Loser's unplayed point cards and haggis point cards are not scored separately.
+        self.assertEqual(score.points, (15 + 1 + 15 + 30, 1))
+
+    def test_card_point_values_match_haggis_rules(self):
+        expected = {
+            2: 0,
+            3: 1,
+            4: 0,
+            5: 1,
+            6: 0,
+            7: 1,
+            8: 0,
+            9: 1,
+            10: 0,
+            11: 2,
+            12: 3,
+            13: 5,
+        }
+        for rank, points in expected.items():
+            with self.subTest(rank=rank):
+                self.assertEqual(c(rank, wild=rank >= 11).points, points)
+
+    def test_score_hand_awards_combined_bets_to_hand_winner(self):
+        state = HaggisState(hands=((), (c(4),)), captured=((), ()), bets=(30, 30), hand_winner=1)
+
+        score = state.score_hand()
+
+        self.assertEqual(score.points, (0, 30 + 30))
 
     def test_bots_return_legal_moves(self):
         state = HaggisState(hands=((c(7), c(8), c(9)), (c(3),)), current_player=0)

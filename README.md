@@ -146,16 +146,21 @@ For stronger but slower play, use root `6` and rollout turns `80`.
 ## Strategy guide
 
 Haggis is a climbing/shedding game: you win hands by going out, but the score is
-mostly decided by who captures point cards, haggis cards, and successful bets.
-Good play balances tempo, point control, and bomb timing.
+mostly decided by captured point cards, leftover-card penalties, and successful
+bets. Point cards are `3`, `5`, `7`, and `9` for 1 point each, `J` for 2, `Q`
+for 3, and `K` for 5. When a player goes out, they also score 5 points for each
+card left in the opponent's hand. Successful bets swing the combined wager: 15,
+30, 45, or 60 points depending on whether one or both players bet and for how
+much. Good play balances tempo, point control, and bomb timing.
 
 ### Core priorities
 
-1. **Go out before the opponent.** Emptying your hand ends the hand and usually
-   awards the opponent's remaining card points to you. Moves that shed multiple
-   cards are valuable when they do not donate too many points.
-2. **Do not donate points cheaply.** Fives, tens, kings, and wild cards carry
-   points. Avoid spending them into tricks you are unlikely to win back.
+1. **Go out before the opponent.** Emptying your hand ends the hand and scores 5
+   points for every card left in the opponent's hand. Moves that shed multiple
+   cards are valuable when they do not donate too many captured points.
+2. **Do not donate points cheaply.** Threes, fives, sevens, nines, jacks, queens,
+   and kings carry points. Avoid spending them into tricks you are unlikely to
+   win back.
 3. **Control the lead.** Leading lets you choose the combination family. If your
    hand has strong pairs, sequences, or bombs, try to regain the lead before your
    opponent can shed freely.
@@ -169,7 +174,9 @@ Good play balances tempo, point control, and bomb timing.
 ### Opening and betting
 
 - Bet only with real strength: multiple wilds, high point density, strong same-rank
-  groups, or flexible sequences.
+  groups, or flexible sequences. If both players bet, the hand winner collects
+  the combined wager, so a 15-vs-30 betting round is worth 45 points and a
+  30-vs-30 round is worth 60.
 - A speculative bet can erase a good hand if you fail to go out first, so avoid
   betting just because you have points.
 - Early in the hand, lead low-commitment combinations that reveal little and keep
