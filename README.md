@@ -81,10 +81,12 @@ python3 -m haggis.ladder \
   --output-json runs/release-validation-ladder.json
 ```
 
-In this validation run, `policy-rollout` ranked first with a 71.4% hand win rate
-and +5280 score margin over 112 hands. The matching benchmark at this budget
-measured `policy-rollout` at about 0.073s/decision, compared with 0.012s for the
-direct `policy` bot and 0.751s for `information-set`.
+In the larger 12-hand validation run, `policy-rollout` ranked first with a 67.3%
+hand win rate and +6756 score margin over 168 hands. A smaller 8-hand validation
+run also ranked `policy-rollout` first at 71.4% over 112 hands. The matching
+benchmark at this budget measured `policy-rollout` at about 0.073s/decision,
+compared with 0.012s for the direct `policy` bot and 0.751s for
+`information-set`.
 
 ## Bot roster
 
@@ -270,6 +272,6 @@ seeded small hands, including bombs, wilds, and sequences.
 Remaining useful next steps:
 
 1. Mature the shallow `tree-information-set` prototype into fuller ISMCTS with deeper reusable child nodes.
-2. Run larger ladders before treating `models/linear_policy.json` as a release-strength model.
+2. Run even larger ladders before treating `models/linear_policy.json` as a release-strength model.
 3. Add more evaluation runs against stronger/search opponents and tune policy-rollout/tree-search budgets.
 4. Continue profiling sequence generation if larger ladders need more throughput.
