@@ -91,11 +91,31 @@ python3 -m haggis.ladder \
   --output-json runs/release-validation-ladder.json
 ```
 
-In the current 12-hand validation run for the promoted larger model,
-`policy-rollout` ranked first with a 72.0% hand win rate and +8024 score margin
+In the current 12-hand validation run for the promoted official-scoring model,
+`policy-rollout` ranked first with a 68.5% hand win rate and +6883 score margin
 over 168 hands. The matching benchmark at this budget measured `policy-rollout`
-at about 0.050s/decision, compared with 0.008s for the direct `policy` bot and
-0.432s for `information-set`.
+at about 0.054s/decision, compared with 0.008s for the direct `policy` bot and
+0.444s for `information-set`.
+
+## CPU ratings and improvement tracking
+
+`python3 -m haggis.ladder` maintains an Elo ladder for CPU-vs-CPU comparison.
+Each ordered matchup updates ratings from the hand win rate in that match, using
+an initial rating of 1500 and configurable `--k-factor` (default 32). JSON output
+includes the rating system metadata, standings, per-bot entries, and each match's
+before/after ratings, so future model or bot changes can be compared over time.
+
+Example:
+
+```bash
+python3 -m haggis.ladder \
+  --bots policy-rollout,policy,point-aware,bomb-control,information-set,greedy \
+  --policy-model models/linear_policy.json \
+  --hands 12 \
+  --search-root-moves 4 \
+  --search-rollout-turns 40 \
+  --output-json runs/ratings/current.json
+```
 
 ## Bot roster
 

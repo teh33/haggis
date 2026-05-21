@@ -154,6 +154,12 @@ def format_ladder(result: LadderResult) -> str:
 def ladder_to_metrics(result: LadderResult, *, config: dict | None = None) -> dict:
     return {
         "config": config or {},
+        "rating_system": {
+            "name": "elo",
+            "initial_rating": (config or {}).get("initial_rating", 1500.0),
+            "k_factor": (config or {}).get("k_factor", 32.0),
+            "score_basis": "hand_win_rate_per_ordered_match",
+        },
         "standings": [_entry_to_dict(entry) for entry in result.standings],
         "entries": [_entry_to_dict(entry) for entry in result.entries],
         "matches": [_match_to_dict(match) for match in result.matches],
@@ -274,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 "hands_per_match": args.hands,
                 "seed": args.seed,
                 "max_turns": args.max_turns,
+                "initial_rating": 1500.0,
                 "k_factor": args.k_factor,
                 "policy_model": args.policy_model,
                 "search_simulations": args.search_simulations,

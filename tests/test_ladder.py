@@ -106,6 +106,8 @@ class LadderTests(unittest.TestCase):
         self.assertEqual(len(metrics["matches"]), 2)
         self.assertIn("bot", metrics["standings"][0])
         self.assertIn("rating", metrics["standings"][0])
+        self.assertEqual(metrics["rating_system"]["name"], "elo")
+        self.assertEqual(metrics["rating_system"]["score_basis"], "hand_win_rate_per_ordered_match")
         self.assertIn("score_margin", metrics["standings"][0])
         self.assertIn("bot_a", metrics["matches"][0])
         self.assertIn("bot_b", metrics["matches"][0])
