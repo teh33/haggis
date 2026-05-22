@@ -74,6 +74,7 @@ class WebSessionTests(unittest.TestCase):
         self.assertEqual(snapshot["gameWinner"], "human")
         self.assertIsNotNone(snapshot["handScoreBreakdown"])
         self.assertEqual(snapshot["handScoreBreakdown"]["total"], snapshot["score"])
+        self.assertEqual([row["label"] for row in snapshot["handScoreBreakdown"]["rows"][:2]], ["Scored Cards", "Leftover Cards"])
         self.assertGreaterEqual(snapshot["cumulativeScore"]["human"], 350)
 
     def test_web_session_next_hand_resets_deal_when_game_not_complete(self):
@@ -90,8 +91,22 @@ class WebSessionTests(unittest.TestCase):
 
         self.assertEqual(session.hand_number, previous_hand + 1)
         self.assertFalse(session.betting_complete)
-        self.assertEqual(session.bets_placed, (False, False))
+        self.assertFalse(session.bets_placed[session.human_player])
         self.assertIsNone(session.state.hand_winner)
+
+    def test_web_session_next_hand_cpu_lead_auto_plays_to_human(self):
+        _session_id, session = HaggisWebApp().create_session(seed=1, cpu_name="greedy")
+        session.cumulative_score = (20, 10)
+        session.state = HaggisState(hands=((), ((Card(Rank.THREE, Suit.CLUBS)),)), hand_winner=0)
+        previous_hand = session.hand_number
+
+        session.start_next_hand()
+
+        self.assertEqual(session.hand_number, previous_hand + 1)
+        self.assertEqual(session.dealer, session.human_player)
+        self.assertEqual(session.state.current_player, session.human_player)
+        self.assertTrue(session.state.has_played[session.cpu_player])
+        self.assertIn("CPU:", "\n".join(session.turn_log))
 
     def test_cpu_bets_before_first_cpu_play_not_before_human_play(self):
         _session_id, session = HaggisWebApp().create_session(seed=1, cpu_name="greedy")

@@ -80,6 +80,7 @@ class WebGameSession:
         self.bets_placed = (False, False)
         self.betting_complete = False
         self.turn_log.append(f"Hand {self.hand_number} started. First to {self.target_score}.")
+        self.play_cpu_until_human_turn()
 
     @property
     def game_winner(self) -> int | None:
@@ -195,7 +196,7 @@ class WebGameSession:
         bet_awards = [0, 0]
         rows = [
             {
-                "label": "5xCaptured cards",
+                "label": "Scored Cards",
                 "human": captured[self.human_player]
                 + (leftover_points if winner == self.human_player else 0)
                 + (haggis_points if winner == self.human_player else 0),
@@ -204,7 +205,7 @@ class WebGameSession:
                 + (haggis_points if winner == self.cpu_player else 0),
             },
             {
-                "label": "Leftover-card bonus",
+                "label": "Leftover Cards",
                 "human": leftover_count_bonus if winner == self.human_player else 0,
                 "cpu": leftover_count_bonus if winner == self.cpu_player else 0,
             },
