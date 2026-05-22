@@ -520,6 +520,25 @@ class PolicyBot:
         return self.policy.choose_move(state, moves)
 
 
+class TorchPolicyBot:
+    """Bot backed by a PyTorch action-ranking policy model."""
+
+    def __init__(self, model_path: str | Path = "models/torch_policy.pt"):
+        from .torch_policy import load_torch_policy
+
+        self.model_path = Path(model_path)
+        self.policy = load_torch_policy(self.model_path)
+
+    def choose_bet(self, state: HaggisState, player: int) -> int:
+        return bet_amount_for_hand(state.hands[player], aggression=1)
+
+    def choose_move(self, state: HaggisState) -> Move:
+        moves = state.legal_moves()
+        if not moves:
+            raise ValueError("no legal moves available")
+        return self.policy.choose_move(state, moves)
+
+
 class EndgameSearchBot:
     """Perfect-information minimax bot for small endgame states.
 

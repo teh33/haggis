@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TreeInformationSetBot, UCBInformationSetBot
+from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TorchPolicyBot, TreeInformationSetBot, UCBInformationSetBot
 from .combinations import CombinationType
 from .engine import HaggisState, Move
 
@@ -147,6 +147,7 @@ BOT_TYPES = {
     "policy": PolicyBot,
     "policy-rollout": PolicyRolloutBot,
     "random": RandomBot,
+    "torch-policy": TorchPolicyBot,
     "tree-information-set": TreeInformationSetBot,
     "ucb-information-set": UCBInformationSetBot,
 }
@@ -199,6 +200,8 @@ def make_bot(
         )
     if bot_type is PolicyBot:
         return PolicyBot(model_path=policy_model or "models/linear_policy.json")
+    if bot_type is TorchPolicyBot:
+        return TorchPolicyBot(model_path=policy_model or "models/torch_policy.pt")
     if bot_type is PolicyRolloutBot:
         return PolicyRolloutBot(
             model_path=policy_model or "models/linear_policy.json",

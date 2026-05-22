@@ -257,11 +257,17 @@ def _visible_trick_cards(state: HaggisState, latest_played_cards: tuple[Card, ..
     return latest_played_cards
 
 
-def new_session(seed: int | None = None, cpu_name: str = "policy-rollout", target_score: int = 350) -> WebGameSession:
+DEFAULT_CPU = "torch-policy"
+DEFAULT_LINEAR_POLICY_MODEL = "models/linear_policy.json"
+DEFAULT_TORCH_POLICY_MODEL = "models/torch_policy.pt"
+
+
+def new_session(seed: int | None = None, cpu_name: str = DEFAULT_CPU, target_score: int = 350) -> WebGameSession:
     if target_score < 1:
         raise ValueError("target_score must be at least 1")
     actual_seed = Random().randrange(1, 1_000_000_000) if seed is None else seed
-    cpu = make_bot(cpu_name, seed=actual_seed * 2 + 1, policy_model="models/linear_policy.json")
+    policy_model = DEFAULT_TORCH_POLICY_MODEL if cpu_name == "torch-policy" else DEFAULT_LINEAR_POLICY_MODEL
+    cpu = make_bot(cpu_name, seed=actual_seed * 2 + 1, policy_model=policy_model)
     state = HaggisState.new_deal(seed=actual_seed, dealer=1).assert_invariants(full_deck=True)
     return WebGameSession(state=state, cpu=cpu, target_score=target_score, base_seed=actual_seed, dealer=1, turn_log=[f"Game started. First to {target_score}."])
 
@@ -283,7 +289,7 @@ class HaggisWebApp:
     def __init__(self) -> None:
         self.sessions: dict[str, WebGameSession] = {}
 
-    def create_session(self, seed: int | None = None, cpu_name: str = "policy-rollout", target_score: int = 350) -> tuple[str, WebGameSession]:
+    def create_session(self, seed: int | None = None, cpu_name: str = DEFAULT_CPU, target_score: int = 350) -> tuple[str, WebGameSession]:
         session_id = f"s{Random().randrange(1, 10**18):018d}"
         session = new_session(seed=seed, cpu_name=cpu_name, target_score=target_score)
         self.sessions[session_id] = session
@@ -316,7 +322,7 @@ class HaggisRequestHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             path = urlparse(self.path).path
             if path == "/api/new":
-                session_id, session = APP.create_session(seed=payload.get("seed"), cpu_name=payload.get("cpu", "policy-rollout"), target_score=int(payload.get("targetScore", 350)))
+                session_id, session = APP.create_session(seed=payload.get("seed"), cpu_name=payload.get("cpu", DEFAULT_CPU), target_score=int(payload.get("targetScore", 350)))
                 self._send_json({"sessionId": session_id, "state": session.snapshot()})
                 return
 

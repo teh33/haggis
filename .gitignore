@@ -13,5 +13,6 @@ htmlcov/
 data/
 models/*
 !models/linear_policy.json
+!models/torch_policy.pt
 runs/
 *.jsonl
