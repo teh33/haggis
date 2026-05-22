@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Haggis</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="table">
+      <div class="visually-hidden">
+        <p id="game-status">Game to 350: You 0 — CPU 0</p>
+        <button id="new-game" type="button">New game</button>
+      </div>
+
+      <section class="top-grid">
+        <div id="bet-panel" class="panel betting">
+          <h2>Opening bet</h2>
+          <p>Bet before playing your first card.</p>
+          <div class="actions compact-actions">
+            <button data-bet="0" type="button">No bet</button>
+            <button data-bet="15" type="button">Bet 15</button>
+            <button data-bet="30" type="button">Bet 30</button>
+          </div>
+        </div>
+
+        <div class="trick-stack">
+          <div class="panel cpu-strip">
+            <span>CPU</span>
+            <strong id="cpu-cards">—</strong><span>cards</span>
+            <span id="cpu-wilds"></span>
+            <div id="cpu-hand" class="visually-hidden"></div>
+          </div>
+          <div class="panel trick-panel">
+            <h2>Current Trick</h2>
+            <p id="turn" class="turn-status">Starting…</p>
+            <p id="trick-message" class="muted-line"></p>
+            <p id="last-play" class="visually-hidden">No current trick.</p>
+            <div id="trick-cards" class="trick-cards"></div>
+            <div id="last-played-cards" class="visually-hidden"></div>
+          </div>
+        </div>
+
+        <div class="panel score-panel">
+          <h2>Hand scoring</h2>
+          <p id="points">Captured: —</p>
+          <p>Hand <strong id="hand-number">1</strong> · Game to <strong id="target-score">350</strong></p>
+          <p>Cumulative: You <strong id="game-score-human">0</strong> — CPU <strong id="game-score-cpu">0</strong></p>
+          <div id="score-breakdown" class="score-breakdown"></div>
+          <button id="next-hand" type="button">Next hand</button>
+        </div>
+      </section>
+
+      <section class="panel hand-panel">
+        <div class="hand-heading">
+          <div class="actions hand-actions sort-actions">
+            <button id="sort-rank" type="button">Sort number</button>
+            <button id="sort-suit" type="button">Sort color</button>
+          </div>
+          <div class="actions hand-actions play-actions">
+            <button id="play-selected" type="button">Play selected</button>
+            <button id="pass" type="button">Pass</button>
+          </div>
+        </div>
+        <div id="selected-cards" class="visually-hidden">—</div>
+        <div id="hint" class="visually-hidden">Select cards to play.</div>
+        <div id="human-hand" class="hand"></div>
+      </section>
+
+      <section class="panel log-panel">
+        <details>
+          <summary>Log / details</summary>
+          <div class="detail-columns">
+            <div>
+              <h3><span id="move-count">0</span> legal moves</h3>
+              <ol id="legal-moves"></ol>
+            </div>
+            <div>
+              <h3>Log</h3>
+              <ol id="log"></ol>
+            </div>
+          </div>
+        </details>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
