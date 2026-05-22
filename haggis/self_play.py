@@ -8,7 +8,7 @@ from typing import Any
 
 from .combinations import Combination, CombinationType
 from .engine import HaggisState, Move
-from .tournament import Bot, _place_initial_bets, make_bot
+from .tournament import Bot, _place_player_bet, make_bot
 
 JsonObject = dict[str, Any]
 
@@ -137,8 +137,6 @@ def _play_hand_records(
     search_config: JsonObject,
 ) -> tuple[JsonObject, ...]:
     state = HaggisState.new_deal(seed=seed, dealer=dealer).assert_invariants(full_deck=True)
-    if enable_betting:
-        state = _place_initial_bets(state, bots).assert_invariants(full_deck=True)
     pending: list[JsonObject] = []
     turn_index = 0
 
@@ -147,6 +145,9 @@ def _play_hand_records(
             raise RuntimeError(f"hand exceeded {max_turns} turns")
 
         player = state.current_player
+        if enable_betting and not state.has_played[player]:
+            state = _place_player_bet(state, bots[player], player).assert_invariants(full_deck=True)
+
         legal_moves = state.legal_moves()
         legal_set = set(legal_moves)
         move = bots[player].choose_move(state)

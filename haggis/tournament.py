@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TreeInformationSetBot, UCBInformationSetBot
+from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TorchPolicyBot, TreeInformationSetBot, UCBInformationSetBot
 from .combinations import CombinationType
 from .engine import HaggisState, Move
 
@@ -147,6 +147,7 @@ BOT_TYPES = {
     "policy": PolicyBot,
     "policy-rollout": PolicyRolloutBot,
     "random": RandomBot,
+    "torch-policy": TorchPolicyBot,
     "tree-information-set": TreeInformationSetBot,
     "ucb-information-set": UCBInformationSetBot,
 }
@@ -159,6 +160,10 @@ def make_bot(
     search_simulations: int | None = None,
     search_root_moves: int | None = None,
     search_rollout_turns: int | None = None,
+    torch_bet_model: str | None = None,
+    bot_a_bet_model: str | None = None,
+    bot_b_bet_model: str | None = None,
+    enable_betting: bool = True,
 ) -> Bot:
     try:
         bot_type = BOT_TYPES[name]
@@ -199,6 +204,10 @@ def make_bot(
         )
     if bot_type is PolicyBot:
         return PolicyBot(model_path=policy_model or "models/linear_policy.json")
+    if bot_type is TorchPolicyBot:
+        if not policy_model:
+            raise ValueError("torch-policy requires --policy-model")
+        return TorchPolicyBot(model_path=policy_model, bet_model_path=torch_bet_model)
     if bot_type is PolicyRolloutBot:
         return PolicyRolloutBot(
             model_path=policy_model or "models/linear_policy.json",
@@ -219,8 +228,6 @@ def play_hand(
     enable_betting: bool = True,
 ) -> HandResult:
     state = HaggisState.new_deal(seed=seed, dealer=dealer).assert_invariants(full_deck=True)
-    if enable_betting:
-        state = _place_initial_bets(state, bots).assert_invariants(full_deck=True)
     turns = 0
     passes = 0
     bombs = 0
@@ -230,6 +237,9 @@ def play_hand(
             raise RuntimeError(f"hand exceeded {max_turns} turns")
 
         player = state.current_player
+        if enable_betting and not state.has_played[player]:
+            state = _place_player_bet(state, bots[player], player).assert_invariants(full_deck=True)
+
         legal = set(state.legal_moves())
         move = bots[player].choose_move(state)
         if move not in legal:
@@ -259,15 +269,21 @@ def run_game(
     bot_a: str,
     bot_b: str,
     *,
-    target_score: int = 250,
+    target_score: int = 350,
     seed: int = 1,
     max_hands: int = 100,
     max_turns: int = 500,
     policy_model: str | None = None,
-    enable_betting: bool = True,
+    bot_a_policy_model: str | None = None,
+    bot_b_policy_model: str | None = None,
+    torch_policy_model: str | None = None,
+    torch_bet_model: str | None = None,
+    bot_a_bet_model: str | None = None,
+    bot_b_bet_model: str | None = None,
     search_simulations: int | None = None,
     search_root_moves: int | None = None,
     search_rollout_turns: int | None = None,
+    enable_betting: bool = True,
 ) -> GameResult:
     if target_score < 1:
         raise ValueError("target_score must be at least 1")
@@ -278,7 +294,8 @@ def run_game(
         make_bot(
             bot_a,
             seed=seed * 2 + 1,
-            policy_model=policy_model,
+            policy_model=bot_a_policy_model or _model_for_bot_name(bot_a, policy_model=policy_model, torch_policy_model=torch_policy_model),
+            torch_bet_model=bot_a_bet_model or torch_bet_model,
             search_simulations=search_simulations,
             search_root_moves=search_root_moves,
             search_rollout_turns=search_rollout_turns,
@@ -286,7 +303,8 @@ def run_game(
         make_bot(
             bot_b,
             seed=seed * 2 + 2,
-            policy_model=policy_model,
+            policy_model=bot_b_policy_model or _model_for_bot_name(bot_b, policy_model=policy_model, torch_policy_model=torch_policy_model),
+            torch_bet_model=bot_b_bet_model or torch_bet_model,
             search_simulations=search_simulations,
             search_root_moves=search_root_moves,
             search_rollout_turns=search_rollout_turns,
@@ -351,6 +369,12 @@ def run_match(
     seed: int = 1,
     max_turns: int = 500,
     policy_model: str | None = None,
+    bot_a_policy_model: str | None = None,
+    bot_b_policy_model: str | None = None,
+    torch_policy_model: str | None = None,
+    torch_bet_model: str | None = None,
+    bot_a_bet_model: str | None = None,
+    bot_b_bet_model: str | None = None,
     enable_betting: bool = True,
     search_simulations: int | None = None,
     search_root_moves: int | None = None,
@@ -363,7 +387,8 @@ def run_match(
         make_bot(
             bot_a,
             seed=seed * 2 + 1,
-            policy_model=policy_model,
+            policy_model=bot_a_policy_model or _model_for_bot_name(bot_a, policy_model=policy_model, torch_policy_model=torch_policy_model),
+            torch_bet_model=bot_a_bet_model or torch_bet_model,
             search_simulations=search_simulations,
             search_root_moves=search_root_moves,
             search_rollout_turns=search_rollout_turns,
@@ -371,7 +396,8 @@ def run_match(
         make_bot(
             bot_b,
             seed=seed * 2 + 2,
-            policy_model=policy_model,
+            policy_model=bot_b_policy_model or _model_for_bot_name(bot_b, policy_model=policy_model, torch_policy_model=torch_policy_model),
+            torch_bet_model=bot_b_bet_model or torch_bet_model,
             search_simulations=search_simulations,
             search_root_moves=search_root_moves,
             search_rollout_turns=search_rollout_turns,
@@ -450,6 +476,12 @@ def game_to_metrics(result: GameResult, *, config: dict | None = None) -> dict:
     }
 
 
+def _model_for_bot_name(bot_name: str, *, policy_model: str | None, torch_policy_model: str | None) -> str | None:
+    if bot_name == "torch-policy":
+        return torch_policy_model or policy_model
+    return policy_model
+
+
 def write_metrics(metrics: dict, path: str | Path) -> None:
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -483,17 +515,22 @@ def _run_config(args: argparse.Namespace, *, mode: str) -> dict:
         "max_turns": args.max_turns,
         "betting": not args.no_betting,
         "policy_model": args.policy_model,
+        "torch_policy_model": args.torch_policy_model,
         "search_simulations": args.search_simulations,
         "search_root_moves": args.search_root_moves,
         "search_rollout_turns": args.search_rollout_turns,
     }
 
 
+def _place_player_bet(state: HaggisState, bot: Bot, player: int) -> HaggisState:
+    chooser = getattr(bot, "choose_bet", None)
+    amount = chooser(state, player) if chooser is not None else 0
+    return state.place_bet(player, amount)
+
+
 def _place_initial_bets(state: HaggisState, bots: tuple[Bot, Bot]) -> HaggisState:
     for player, bot in enumerate(bots):
-        chooser = getattr(bot, "choose_bet", None)
-        amount = chooser(state, player) if chooser is not None else 0
-        state = state.place_bet(player, amount)
+        state = _place_player_bet(state, bot, player)
     return state
 
 
@@ -511,12 +548,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bot-a", choices=sorted(BOT_TYPES), default="greedy")
     parser.add_argument("--bot-b", choices=sorted(BOT_TYPES), default="random")
     parser.add_argument("--hands", type=int, default=100)
-    parser.add_argument("--target-score", type=int, help="Play an official target-score game instead of a fixed-hand tournament")
+    parser.add_argument("--target-score", type=int, help="Play an official target-score game instead of a fixed-hand tournament (default game target: 350)")
     parser.add_argument("--max-hands", type=int, default=100, help="Maximum hands for target-score games")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--max-turns", type=int, default=500)
     parser.add_argument("--no-betting", action="store_true", help="Disable bot pre-play betting")
-    parser.add_argument("--policy-model", default="models/linear_policy.json", help="Model path when using the policy bot")
+    parser.add_argument("--policy-model", default="models/linear_policy.json", help="Model path when using policy or policy-rollout bots")
+    parser.add_argument("--torch-policy-model", help="Model path when using torch-policy bots")
+    parser.add_argument("--torch-bet-model", help="Optional bet model path when using torch-policy bots")
     parser.add_argument("--search-simulations", type=int, help="Simulation budget for rollout/search bots")
     parser.add_argument("--search-root-moves", type=int, help="Maximum root moves considered by rollout/search bots")
     parser.add_argument("--search-rollout-turns", type=int, help="Maximum turns per rollout for rollout/search bots")
@@ -535,6 +574,8 @@ def main(argv: list[str] | None = None) -> int:
             max_hands=args.max_hands,
             max_turns=args.max_turns,
             policy_model=args.policy_model,
+            torch_policy_model=args.torch_policy_model,
+            torch_bet_model=args.torch_bet_model,
             enable_betting=not args.no_betting,
             search_simulations=args.search_simulations,
             search_root_moves=args.search_root_moves,
@@ -552,6 +593,8 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         max_turns=args.max_turns,
         policy_model=args.policy_model,
+        torch_policy_model=args.torch_policy_model,
+        torch_bet_model=args.torch_bet_model,
         enable_betting=not args.no_betting,
         search_simulations=args.search_simulations,
         search_root_moves=args.search_root_moves,

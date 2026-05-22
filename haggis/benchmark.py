@@ -44,6 +44,8 @@ def run_benchmark(
     search_root_moves: int | None = None,
     search_rollout_turns: int | None = None,
     policy_model: str | None = None,
+    torch_policy_model: str | None = None,
+    torch_bet_model: str | None = None,
 ) -> BenchmarkResult:
     if states < 1:
         raise ValueError("states must be at least 1")
@@ -63,11 +65,18 @@ def run_benchmark(
             search_simulations=search_simulations,
             search_root_moves=search_root_moves,
             search_rollout_turns=search_rollout_turns,
-            policy_model=policy_model,
+            policy_model=_policy_model_for_bot(bot_name, policy_model=policy_model, torch_policy_model=torch_policy_model),
+            torch_bet_model=torch_bet_model,
         )
         for bot_name in bot_names
     )
     return BenchmarkResult(seeds=seeds, state_benchmarks=state_benchmarks, bot_benchmarks=bot_benchmarks)
+
+
+def _policy_model_for_bot(bot_name: str, *, policy_model: str | None, torch_policy_model: str | None) -> str | None:
+    if bot_name == "torch-policy":
+        return torch_policy_model or policy_model
+    return policy_model
 
 
 def benchmark_to_metrics(result: BenchmarkResult, *, config: dict | None = None) -> dict:
@@ -142,6 +151,7 @@ def _benchmark_bot(
     search_root_moves: int | None,
     search_rollout_turns: int | None,
     policy_model: str | None,
+    torch_bet_model: str | None = None,
 ) -> BotBenchmark:
     bot = make_bot(
         bot_name,
@@ -150,6 +160,7 @@ def _benchmark_bot(
         search_root_moves=search_root_moves,
         search_rollout_turns=search_rollout_turns,
         policy_model=policy_model,
+        torch_bet_model=torch_bet_model,
     )
     selected: list[str] = []
     started = perf_counter()
@@ -183,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--search-root-moves", type=int)
     parser.add_argument("--search-rollout-turns", type=int)
     parser.add_argument("--policy-model", help="Model path when benchmarking policy or policy-rollout bots")
+    parser.add_argument("--torch-policy-model", help="Model path when benchmarking torch-policy bots")
+    parser.add_argument("--torch-bet-model", help="Optional bet model path when benchmarking torch-policy bots")
     parser.add_argument("--output-json")
     return parser
 
@@ -198,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         search_root_moves=args.search_root_moves,
         search_rollout_turns=args.search_rollout_turns,
         policy_model=args.policy_model,
+        torch_policy_model=args.torch_policy_model,
+        torch_bet_model=args.torch_bet_model,
     )
     print(format_benchmark_summary(result))
     if args.output_json:
@@ -212,6 +227,8 @@ def main(argv: list[str] | None = None) -> int:
                 "search_root_moves": args.search_root_moves,
                 "search_rollout_turns": args.search_rollout_turns,
                 "policy_model": args.policy_model,
+                "torch_policy_model": args.torch_policy_model,
+                "torch_bet_model": args.torch_bet_model,
             },
         )
     return 0

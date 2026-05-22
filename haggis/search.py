@@ -8,20 +8,26 @@ from .engine import HaggisState, Move
 
 
 def bet_amount_for_hand(hand: tuple[Card, ...], *, aggression: int) -> int:
-    """Simple deterministic pre-play betting heuristic."""
-    wild_count = sum(1 for card in hand if card.is_wild)
+    """Deterministic pre-play betting heuristic.
+
+    Haggis bets are high leverage: a failed 30-point bet often decides a 350-point
+    game. Keep ordinary baseline bots conservative so self-play data contains a
+    useful spread of 0/15/30 decisions instead of teaching every model to always
+    slam 30.
+    """
     point_total = sum(card.points for card in hand)
-    high_cards = sum(1 for card in hand if int(card.rank) >= 8)
+    high_cards = sum(1 for card in hand if int(card.rank) >= 9 and not card.is_wild)
     rank_counts: dict[int, int] = {}
     for card in hand:
         if not card.is_wild:
             rank_counts[int(card.rank)] = rank_counts.get(int(card.rank), 0) + 1
-    max_same_rank = max(rank_counts.values(), default=0)
+    pairs = sum(1 for count in rank_counts.values() if count >= 2)
+    triples = sum(1 for count in rank_counts.values() if count >= 3)
 
-    strength = point_total + wild_count * 6 + high_cards * 2 + max_same_rank * 3 + aggression * 3
+    strength = point_total * 1.2 + high_cards * 1.5 + pairs * 1.5 + triples * 3.0 + aggression * 1.0
     if strength >= 42:
         return 30
-    if strength >= 32:
+    if strength >= 36:
         return 15
     return 0
 

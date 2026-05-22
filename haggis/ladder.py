@@ -9,6 +9,13 @@ from .tournament import BOT_TYPES, MatchResult, run_match
 
 
 @dataclass(frozen=True)
+class LadderBotSpec:
+    label: str
+    bot_name: str
+    policy_model: str | None = None
+
+
+@dataclass(frozen=True)
 class LadderEntry:
     bot: str
     rating: float
@@ -62,25 +69,26 @@ def run_ladder(
     initial_rating: float = 1500.0,
     k_factor: float = 32.0,
     policy_model: str | None = None,
+    torch_policy_model: str | None = None,
+    torch_bet_model: str | None = None,
     search_simulations: int | None = None,
     search_root_moves: int | None = None,
     search_rollout_turns: int | None = None,
 ) -> LadderResult:
-    bots = tuple(bot_names)
-    if len(bots) < 2:
-        raise ValueError("ladder requires at least two bots")
-    unknown = sorted(set(bots) - set(BOT_TYPES))
+    specs = tuple(_parse_bot_spec(bot, policy_model=policy_model, torch_policy_model=torch_policy_model) for bot in bot_names)
+    labels = tuple(spec.label for spec in specs)
+    unknown = sorted({spec.bot_name for spec in specs} - set(BOT_TYPES))
     if unknown:
         choices = ", ".join(sorted(BOT_TYPES))
         raise ValueError(f"unknown bot(s): {', '.join(unknown)}; expected one of: {choices}")
-    if len(set(bots)) != len(bots):
-        raise ValueError("bot names must be unique")
+    if len(set(labels)) != len(labels):
+        raise ValueError("bot labels must be unique")
     if hands_per_match < 1:
         raise ValueError("hands_per_match must be at least 1")
 
-    ratings = {bot: initial_rating for bot in bots}
+    ratings = {label: initial_rating for label in labels}
     stats = {
-        bot: {
+        label: {
             "matches": 0,
             "hands": 0,
             "hand_wins": 0,
@@ -88,23 +96,28 @@ def run_ladder(
             "score_for": 0,
             "score_against": 0,
         }
-        for bot in bots
+        for label in labels
     }
     matches: list[LadderMatch] = []
     match_index = 0
 
-    for left_index, bot_left in enumerate(bots):
-        for bot_right in bots[left_index + 1 :]:
-            for bot_a, bot_b in ((bot_left, bot_right), (bot_right, bot_left)):
+    for left_index, spec_left in enumerate(specs):
+        for spec_right in specs[left_index + 1 :]:
+            for spec_a, spec_b in ((spec_left, spec_right), (spec_right, spec_left)):
+                bot_a = spec_a.label
+                bot_b = spec_b.label
                 match_seed = seed + match_index * 1009
                 before = (ratings[bot_a], ratings[bot_b])
                 result = run_match(
-                    bot_a,
-                    bot_b,
+                    spec_a.bot_name,
+                    spec_b.bot_name,
                     hands=hands_per_match,
                     seed=match_seed,
                     max_turns=max_turns,
                     policy_model=policy_model,
+                    bot_a_policy_model=spec_a.policy_model,
+                    bot_b_policy_model=spec_b.policy_model,
+                    torch_bet_model=torch_bet_model,
                     search_simulations=search_simulations,
                     search_root_moves=search_root_moves,
                     search_rollout_turns=search_rollout_turns,
@@ -122,16 +135,16 @@ def run_ladder(
 
     entries = tuple(
         LadderEntry(
-            bot=bot,
-            rating=ratings[bot],
-            matches=stats[bot]["matches"],
-            hands=stats[bot]["hands"],
-            hand_wins=stats[bot]["hand_wins"],
-            hand_losses=stats[bot]["hand_losses"],
-            score_for=stats[bot]["score_for"],
-            score_against=stats[bot]["score_against"],
+            bot=label,
+            rating=ratings[label],
+            matches=stats[label]["matches"],
+            hands=stats[label]["hands"],
+            hand_wins=stats[label]["hand_wins"],
+            hand_losses=stats[label]["hand_losses"],
+            score_for=stats[label]["score_for"],
+            score_against=stats[label]["score_against"],
         )
-        for bot in bots
+        for label in labels
     )
     return LadderResult(entries=entries, matches=tuple(matches))
 
@@ -237,18 +250,42 @@ def _update_elo(rating_a: float, rating_b: float, score_a: float, *, k_factor: f
     return rating_a + delta, rating_b - delta
 
 
+def _parse_bot_spec(spec: str, *, policy_model: str | None, torch_policy_model: str | None) -> LadderBotSpec:
+    label_model_split = spec.split("@", 1)
+    label_and_bot = label_model_split[0]
+    explicit_model = label_model_split[1] if len(label_model_split) == 2 else None
+    if ":" in label_and_bot:
+        label, bot_name = label_and_bot.split(":", 1)
+    else:
+        label = bot_name = label_and_bot
+    if not label or not bot_name:
+        raise ValueError(f"invalid bot spec: {spec!r}")
+    model = explicit_model
+    if model is None:
+        model = _model_for_named_bot(bot_name, policy_model=policy_model, torch_policy_model=torch_policy_model)
+    return LadderBotSpec(label=label, bot_name=bot_name, policy_model=model)
+
+
+def _model_for_named_bot(bot_name: str, *, policy_model: str | None, torch_policy_model: str | None) -> str | None:
+    if bot_name == "torch-policy":
+        return torch_policy_model or policy_model
+    return policy_model
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a deterministic round-robin Haggis bot ladder")
     parser.add_argument(
         "--bots",
         default="random,greedy,point-aware,bomb-control",
-        help="Comma-separated bot names. Available: " + ", ".join(sorted(BOT_TYPES)),
+        help="Comma-separated bot names/specs. Specs may be name, label:name, or label:name@model_path. Available: " + ", ".join(sorted(BOT_TYPES)),
     )
     parser.add_argument("--hands", type=int, default=20, help="Hands per ordered matchup")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--max-turns", type=int, default=500)
     parser.add_argument("--k-factor", type=float, default=32.0)
-    parser.add_argument("--policy-model", default="models/linear_policy.json", help="Model path when using the policy bot")
+    parser.add_argument("--policy-model", default="models/linear_policy.json", help="Model path when using policy or policy-rollout bots")
+    parser.add_argument("--torch-policy-model", help="Model path when using torch-policy bots")
+    parser.add_argument("--torch-bet-model", help="Optional bet model path when using torch-policy bots")
     parser.add_argument("--search-simulations", type=int, help="Simulation budget for rollout/search bots")
     parser.add_argument("--search-root-moves", type=int, help="Maximum root moves considered by rollout/search bots")
     parser.add_argument("--search-rollout-turns", type=int, help="Maximum turns per rollout for rollout/search bots")
@@ -266,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
         max_turns=args.max_turns,
         k_factor=args.k_factor,
         policy_model=args.policy_model,
+        torch_policy_model=args.torch_policy_model,
+        torch_bet_model=args.torch_bet_model,
         search_simulations=args.search_simulations,
         search_root_moves=args.search_root_moves,
         search_rollout_turns=args.search_rollout_turns,
@@ -283,6 +322,8 @@ def main(argv: list[str] | None = None) -> int:
                 "initial_rating": 1500.0,
                 "k_factor": args.k_factor,
                 "policy_model": args.policy_model,
+                "torch_policy_model": args.torch_policy_model,
+                "torch_bet_model": args.torch_bet_model,
                 "search_simulations": args.search_simulations,
                 "search_root_moves": args.search_root_moves,
                 "search_rollout_turns": args.search_rollout_turns,

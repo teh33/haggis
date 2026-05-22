@@ -1,6 +1,6 @@
 import unittest
 
-from haggis import Card, CombinationType, Rank, Suit, can_beat, validate_combination
+from haggis import Card, CombinationType, Rank, Suit, can_beat, possible_combinations, validate_combination
 
 
 def c(rank, suit=Suit.CLUBS, wild=False):
@@ -44,6 +44,36 @@ class CombinationTests(unittest.TestCase):
 
         self.assertEqual(valid.type, CombinationType.SEQUENCE)
         self.assertIsNone(invalid)
+
+    def test_wild_cards_have_multiple_possible_interpretations(self):
+        combos = possible_combinations((c(6, Suit.CLUBS), c(11, wild=True), c(12, wild=True)))
+
+        self.assertIn((CombinationType.SET, 6), {(combo.type, combo.rank) for combo in combos})
+        self.assertIn((CombinationType.SEQUENCE, 8), {(combo.type, combo.rank) for combo in combos})
+
+    def test_set_interpretation_can_beat_same_size_set(self):
+        previous = validate_combination((c(5, Suit.CLUBS), c(5, Suit.DIAMONDS), c(11, wild=True)))
+        new = validate_combination((c(6, Suit.CLUBS), c(11, wild=True), c(12, wild=True)))
+
+        self.assertIsNotNone(previous)
+        self.assertIsNotNone(new)
+        self.assertEqual(previous.type, CombinationType.SET)
+        self.assertEqual(previous.rank, 5)
+        self.assertEqual(new.type, CombinationType.SEQUENCE)
+        self.assertEqual(new.rank, 8)
+        self.assertTrue(can_beat(new, previous))
+
+    def test_wild_sequence_interpretation_takes_precedence_over_lower_set(self):
+        previous = validate_combination((c(7), c(9), c(13, wild=True)))
+        new = validate_combination((c(10), c(12, wild=True), c(13, wild=True)))
+
+        self.assertIsNotNone(previous)
+        self.assertIsNotNone(new)
+        self.assertEqual(previous.type, CombinationType.SEQUENCE)
+        self.assertEqual(previous.rank, 9)
+        self.assertEqual(new.type, CombinationType.SEQUENCE)
+        self.assertEqual(new.rank, 12)
+        self.assertTrue(can_beat(new, previous))
 
     def test_wilds_can_fill_sequence_gaps_with_required_suit(self):
         combo = validate_combination((c(7, Suit.HEARTS), c(8, Suit.HEARTS), c(11, wild=True)))

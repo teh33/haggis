@@ -520,6 +520,40 @@ class PolicyBot:
         return self.policy.choose_move(state, moves)
 
 
+class TorchPolicyBot:
+    """Bot backed by an experimental PyTorch action-ranking policy model."""
+
+    def __init__(self, model_path: str | Path, bet_model_path: str | Path | None = None):
+        from .torch_policy import load_torch_policy
+
+        self.model_path = Path(model_path)
+        self.policy = load_torch_policy(self.model_path)
+        self.bet_model_path = Path(bet_model_path) if bet_model_path is not None else None
+        self.bet_policy = None
+        if self.bet_model_path is not None:
+            from .torch_bet import load_torch_bet_model
+
+            self.bet_policy = load_torch_bet_model(self.bet_model_path)
+
+    def choose_bet(self, state: HaggisState, player: int) -> int:
+        if self.bet_policy is None:
+            return bet_amount_for_hand(state.hands[player], aggression=1)
+        opponent = 1 - player
+        return self.bet_policy.choose_bet_from_hand(
+            state.hands[player],
+            own_score=float(sum(card.points for card in state.captured[player])),
+            opponent_score=float(sum(card.points for card in state.captured[opponent])),
+            opponent_has_bet=float(state.bets[opponent] > 0),
+            opponent_bet=float(state.bets[opponent]),
+        )
+
+    def choose_move(self, state: HaggisState) -> Move:
+        moves = state.legal_moves()
+        if not moves:
+            raise ValueError("no legal moves available")
+        return self.policy.choose_move(state, moves)
+
+
 class EndgameSearchBot:
     """Perfect-information minimax bot for small endgame states.
 

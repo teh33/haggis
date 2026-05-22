@@ -24,6 +24,7 @@ from haggis.tournament import (
     write_metrics,
 )
 from haggis.bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyRolloutBot, UCBInformationSetBot
+from haggis.search import bet_amount_for_hand
 from haggis import HaggisState
 from haggis import tournament
 
@@ -104,13 +105,14 @@ class TournamentTests(unittest.TestCase):
         self.assertEqual(len(result.hands), 3)
         self.assertGreater(sum(result.total_score), 0)
 
-    def test_play_hand_places_initial_bot_bets_before_cards_are_played(self):
+    def test_play_hand_places_each_bot_bet_before_that_bot_first_plays(self):
         class FixedBetBot(GreedySheddingBot):
             def __init__(self, amount):
                 self.amount = amount
+                self.seen_states = []
 
             def choose_bet(self, state, player):
-                self.seen_has_played = state.has_played
+                self.seen_states.append((state.has_played, state.bets))
                 return self.amount
 
         bot_a = FixedBetBot(15)
@@ -119,8 +121,9 @@ class TournamentTests(unittest.TestCase):
         result = play_hand((bot_a, bot_b), seed=1)
 
         self.assertEqual(result.bets, (15, 30))
-        self.assertEqual(bot_a.seen_has_played, (False, False))
-        self.assertEqual(bot_b.seen_has_played, (False, False))
+        self.assertEqual(bot_a.seen_states[0], ((False, False), (0, 0)))
+        self.assertEqual(bot_b.seen_states[0][0], (True, False))
+        self.assertEqual(bot_b.seen_states[0][1], (15, 0))
         self.assertEqual(result.bet_stats.placed, (1, 1))
         self.assertEqual(sum(result.bet_stats.succeeded), 1)
         self.assertEqual(sum(result.bet_stats.failed), 1)
@@ -146,6 +149,15 @@ class TournamentTests(unittest.TestCase):
                 self.assertEqual(first, second)
                 self.assertIn(first, (0, 15, 30))
 
+    def test_betting_heuristic_has_conservative_spread(self):
+        weak = HaggisState.new_deal(seed=1).hands[0]
+        medium = HaggisState.new_deal(seed=1).hands[1]
+        strong = HaggisState.new_deal(seed=4).hands[0]
+
+        self.assertEqual(bet_amount_for_hand(weak, aggression=1), 0)
+        self.assertEqual(bet_amount_for_hand(medium, aggression=1), 15)
+        self.assertEqual(bet_amount_for_hand(strong, aggression=1), 30)
+
     def test_cli_can_disable_betting(self):
         output = io.StringIO()
 
@@ -159,6 +171,21 @@ class TournamentTests(unittest.TestCase):
         self.assertEqual(_next_dealer((40, 10), last_hand_winner=1), 0)
         self.assertEqual(_next_dealer((10, 40), last_hand_winner=0), 1)
         self.assertEqual(_next_dealer((20, 20), last_hand_winner=1), 0)
+
+    def test_run_game_defaults_to_official_350_point_target(self):
+        class ScriptedHandPlayer:
+            def __call__(self, *_args, **_kwargs):
+                return HandResult(winner=0, score=(350, 0), turns=1, passes=0, bombs=0, cards_remaining=(0, 1))
+
+        original_play_hand = tournament.play_hand
+        tournament.play_hand = ScriptedHandPlayer()
+        try:
+            result = run_game("random", "greedy", seed=1, max_hands=1)
+        finally:
+            tournament.play_hand = original_play_hand
+
+        self.assertEqual(result.target_score, 350)
+        self.assertEqual(result.total_score, (350, 0))
 
     def test_run_game_accumulates_scores_and_dealer_progression(self):
         result = run_game("random", "greedy", target_score=80, seed=2, max_hands=10)

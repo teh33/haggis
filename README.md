@@ -55,7 +55,7 @@ Run an official target-score game:
 python3 -m haggis.tournament \
   --bot-a point-aware \
   --bot-b bomb-control \
-  --target-score 250 \
+  --target-score 350 \
   --max-hands 100 \
   --seed 1 \
   --output-json runs/game.json
@@ -100,7 +100,11 @@ over 280 hands. The matching 50-state benchmark at this budget measured
 
 ## Champion/challenger promotion gates
 
-Use a fixed-seed promotion gate before replacing the default model:
+Use a fixed-seed promotion gate before replacing the default model. Small gates
+are useful for smoke tests only; require a larger confirmation block before
+promotion because 20-game gates have produced false positives in local
+experiments. The torch gate CLI accepts comma-separated seeds and inclusive seed
+ranges such as `7600:7659`:
 
 ```bash
 python3 -m haggis.promotion \
@@ -113,12 +117,25 @@ python3 -m haggis.promotion \
   --search-rollout-turns 40
 ```
 
-The gate runs separate champion and challenger Elo ladders against the same
-baselines, benchmarks `policy-rollout` speed for both models, writes
-`promotion.json` plus ladder/benchmark artifacts, and fails if the challenger does
-not meet the minimum rating, win-rate, and speed criteria. Use `--promote-to
-models/linear_policy.json` only when you want a passing gate to copy the
-challenger over the default model.
+For PyTorch policy candidates, use a larger champion-vs-challenger confirmation
+gate before copying a candidate over the current champion:
+```bash
+python3-torch -m haggis.torch_gate \
+  --champion runs/torch-champions/current.pt \
+  --challenger runs/candidate/candidate.pt \
+  --output-dir runs/candidate/gate-confirm-60g \
+  --seeds 7600:7659 \
+  --target-score 350 \
+  --max-hands 30 \
+  --search-root-moves 3 \
+  --search-rollout-turns 16 \
+  --require-wins 31
+```
+Treat a 20-game pass as a screening signal, not promotion evidence. In May 2026,
+self-play candidates that passed 20-game torch gates later failed 60-game
+confirmation blocks, so promotion should require a positive larger gate before
+updating `runs/torch-champions/current.pt`.
+
 
 ## CPU ratings and improvement tracking
 
@@ -146,7 +163,7 @@ Available bot names for tournament/ladder commands:
 
 | Bot | Description |
 | --- | --- |
-| `random` | Uniform random legal move; always bets 0. |
+| `random` | Uniform random legal move; uses the default hand-strength betting heuristic. |
 | `greedy` | Sheds the most cards, then prefers lower commitment. |
 | `point-aware` | Avoids unnecessary point-card/wild-card donation. |
 | `bomb-control` | Conservative heuristic that saves bombs for threats/endgames. |

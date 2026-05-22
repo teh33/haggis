@@ -472,8 +472,8 @@ class PolicyTrainingTests(unittest.TestCase):
 
             result = run_match("policy", "policy", hands=1, seed=9, policy_model=str(model_path))
 
-        self.assertEqual(result.hands[0].bets[0], result.hands[0].bets[1])
         self.assertIn(result.hands[0].bets[0], (0, 15, 30))
+        self.assertIn(result.hands[0].bets[1], (0, 15, 30))
         self.assertEqual(result.total_bets_placed[0], 1 if result.hands[0].bets[0] else 0)
         self.assertEqual(result.total_bets_placed[1], 1 if result.hands[0].bets[1] else 0)
 

@@ -42,30 +42,38 @@ class Combination:
 
 
 def validate_combination(cards: tuple[Card, ...] | list[Card]) -> Combination | None:
+    combinations = possible_combinations(cards)
+    return combinations[0] if combinations else None
+
+
+def possible_combinations(cards: tuple[Card, ...] | list[Card]) -> tuple[Combination, ...]:
     ordered = tuple(sorted(cards))
     if not ordered:
-        return None
+        return ()
 
+    combinations: list[Combination] = []
     bomb_rank = bomb_rank_for(ordered)
     if bomb_rank:
-        return Combination(ordered, CombinationType.BOMB, rank=bomb_rank, bomb_rank=bomb_rank)
-
-    set_rank = set_rank_for(ordered)
-    if set_rank is not None:
-        return Combination(ordered, CombinationType.SET, rank=set_rank)
+        combinations.append(Combination(ordered, CombinationType.BOMB, rank=bomb_rank, bomb_rank=bomb_rank))
 
     sequence = sequence_shape_for(ordered)
     if sequence is not None:
         high_rank, width, length = sequence
-        return Combination(
-            ordered,
-            CombinationType.SEQUENCE,
-            rank=high_rank,
-            sequence_width=width,
-            sequence_length=length,
+        combinations.append(
+            Combination(
+                ordered,
+                CombinationType.SEQUENCE,
+                rank=high_rank,
+                sequence_width=width,
+                sequence_length=length,
+            )
         )
 
-    return None
+    set_rank = set_rank_for(ordered)
+    if set_rank is not None:
+        combinations.append(Combination(ordered, CombinationType.SET, rank=set_rank))
+
+    return tuple(combinations)
 
 
 def bomb_rank_for(cards: tuple[Card, ...]) -> int:
@@ -186,6 +194,17 @@ def _wilds_can_fill(wilds: tuple[Card, ...], slots: tuple[tuple[int, Suit], ...]
 
 
 def can_beat(new: Combination, previous: Combination | None) -> bool:
+    if _can_beat_as_typed(new, previous):
+        return True
+    if previous is None or new.type == CombinationType.BOMB:
+        return False
+    return any(
+        alternative != new and _can_beat_as_typed(alternative, previous)
+        for alternative in possible_combinations(new.cards)
+    )
+
+
+def _can_beat_as_typed(new: Combination, previous: Combination | None) -> bool:
     if previous is None:
         return True
 
@@ -196,6 +215,7 @@ def can_beat(new: Combination, previous: Combination | None) -> bool:
 
     if previous.type == CombinationType.BOMB:
         return False
+
     if new.type != previous.type:
         return False
     if new.card_count != previous.card_count:
