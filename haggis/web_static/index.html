@@ -30,32 +30,39 @@
           </div>
         </div>
 
-        <div class="panel trick-panel">
-          <h2>Current Trick</h2>
-          <p id="turn" class="turn-status">Starting…</p>
-          <p id="trick-message" class="muted-line"></p>
-          <p id="last-play" class="visually-hidden">No current trick.</p>
-          <div id="trick-cards" class="trick-cards"></div>
-          <div id="last-played-cards" class="visually-hidden"></div>
+        <div class="trick-stack">
+          <div class="panel cpu-strip">
+            <span>CPU</span>
+            <strong id="cpu-cards">—</strong><span>cards</span>
+            <span id="cpu-wilds"></span>
+            <div id="cpu-hand" class="visually-hidden"></div>
+          </div>
+          <div class="panel trick-panel">
+            <h2>Current Trick</h2>
+            <p id="turn" class="turn-status">Starting…</p>
+            <p id="trick-message" class="muted-line"></p>
+            <p id="last-play" class="visually-hidden">No current trick.</p>
+            <div id="trick-cards" class="trick-cards"></div>
+            <div id="last-played-cards" class="visually-hidden"></div>
+          </div>
         </div>
 
         <div class="panel score-panel">
           <h2>Hand scoring</h2>
           <p id="points">Captured: —</p>
           <p>Hand <strong id="hand-number">1</strong> · Game to <strong id="target-score">350</strong></p>
-          <p>CPU: <strong id="cpu-cards">—</strong> cards · <span id="cpu-wilds"></span></p>
           <p>Cumulative: You <strong id="game-score-human">0</strong> — CPU <strong id="game-score-cpu">0</strong></p>
-          <div id="cpu-hand" class="visually-hidden"></div>
           <div id="score-breakdown" class="score-breakdown"></div>
         </div>
       </section>
 
       <section class="panel hand-panel">
         <div class="hand-heading">
-          <h2>Your hand</h2>
-          <div class="actions hand-actions">
+          <div class="actions hand-actions sort-actions">
             <button id="sort-rank" type="button">Sort number</button>
             <button id="sort-suit" type="button">Sort color</button>
+          </div>
+          <div class="actions hand-actions play-actions">
             <button id="play-selected" type="button">Play selected</button>
             <button id="pass" type="button">Pass</button>
           </div>

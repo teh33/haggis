@@ -24,11 +24,14 @@ h3 { font-size: 0.82rem; }
 .panel { background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.35); border-radius: 0; padding: 14px; margin-bottom: 14px; box-shadow: 0 0 18px rgba(255,255,255,.06), inset 0 0 18px rgba(255,255,255,.025); }
 .betting { border-color: rgba(255,255,255,.75); }
 .top-grid { align-items: stretch; }
-.top-grid > .panel { flex: 1; min-width: 0; }
-.trick-panel { flex: 1.35; }
+.top-grid > .panel, .top-grid > .trick-stack { flex: 1; min-width: 0; }
+.trick-stack { flex: 1.35; display: flex; flex-direction: column; gap: 8px; }
+.trick-panel { flex: 1; }
 .score-panel { flex: 1; }
 .log-panel { flex: 1; }
 .hand-heading { justify-content: space-between; align-items: center; }
+.sort-actions { justify-content: flex-start; }
+.play-actions { justify-content: flex-end; }
 .hand-actions { flex-wrap: nowrap; white-space: nowrap; }
 .hand-actions button { padding: 0.48rem 0.58rem; font-size: 0.74rem; }
 .hand { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 8px; }
@@ -53,6 +56,8 @@ h3 { font-size: 0.82rem; }
 .cpu-hand, .mini-hand, .trick-cards { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cpu-hand { margin-bottom: 16px; }
 .mini-hand { min-height: 52px; margin-bottom: 10px; }
+.cpu-strip { min-height: 0; margin-bottom: 0; padding: 8px 10px; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
+.cpu-strip .tiny-card { margin-left: 2px; }
 .trick-cards { min-height: 118px; align-content: center; }
 .card-back { width: 24px; height: 36px; border-radius: 0; background: #000; border: 1px solid rgba(255,255,255,.55); box-shadow: inset 0 0 0 4px #000, inset 0 0 0 5px rgba(255,255,255,.35); }
 .mini-card { width: 52px; height: 72px; }
