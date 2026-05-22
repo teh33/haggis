@@ -1,0 +1,12 @@
+.git
+.imp
+.mana
+.pytest_cache
+__pycache__
+*.pyc
+.DS_Store
+runs/*
+!runs/torch-champions/
+!runs/torch-champions/current.pt
+!runs/torch-champions/champion-003.pt
+!runs/torch-champions/champion-002-before-torch-winners.pt
