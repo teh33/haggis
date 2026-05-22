@@ -48,8 +48,8 @@ h3 { font-size: 0.82rem; }
 .wild { position: absolute; left: 16px; bottom: 12px; color: currentColor; font-size: 0.78rem; opacity: 0.95; text-transform: uppercase; }
 .suit-c { --card-color: #ff3b30; }
 .suit-d { --card-color: #00d5ff; }
-.suit-h { --card-color: #39ff14; }
-.suit-s { --card-color: #ffe600; }
+.suit-h { --card-color: #0a7f3f; }
+.suit-s { --card-color: #c99a16; }
 .cpu-hand, .mini-hand, .trick-cards { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cpu-hand { margin-bottom: 16px; }
 .mini-hand { min-height: 52px; margin-bottom: 10px; }
