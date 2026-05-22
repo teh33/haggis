@@ -10,11 +10,13 @@
     <main class="table">
       <header class="top-bar">
         <div>
-          <p class="eyebrow">Local preview</p>
-          <h1>Haggis vs AI</h1>
+          <h1>Haggis</h1>
           <p id="game-status" class="game-status">Game to 350: You 0 — CPU 0</p>
         </div>
-        <button id="new-game" type="button">New game</button>
+        <div class="header-actions">
+          <button id="new-game" type="button">New game</button>
+          <button id="next-hand" type="button">Next hand</button>
+        </div>
       </header>
 
       <section id="bet-panel" class="panel betting">
@@ -28,13 +30,6 @@
       </section>
 
       <section class="play-grid">
-        <div class="panel cpu-panel">
-          <h2>CPU</h2>
-          <p><strong id="cpu-cards">—</strong> cards</p>
-          <div id="cpu-hand" class="cpu-hand"></div>
-          <div id="cpu-wilds" class="mini-hand"></div>
-        </div>
-
         <div class="panel trick-panel">
           <h2>Current Trick</h2>
           <p id="turn" class="turn-status">Starting…</p>
@@ -67,9 +62,10 @@
           <h2>Hand scoring</h2>
           <p id="points">Captured: —</p>
           <p>Hand <strong id="hand-number">1</strong> · Game to <strong id="target-score">350</strong></p>
+          <p>CPU: <strong id="cpu-cards">—</strong> cards · <span id="cpu-wilds"></span></p>
           <p>Cumulative: You <strong id="game-score-human">0</strong> — CPU <strong id="game-score-cpu">0</strong></p>
+          <div id="cpu-hand" class="visually-hidden"></div>
           <div id="score-breakdown" class="score-breakdown"></div>
-          <button id="next-hand" type="button">Next hand</button>
         </div>
 
         <div class="panel log-panel">

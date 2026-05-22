@@ -28,6 +28,7 @@ function normalizeState(rawState) {
     lastPlayedCards: [],
     currentPlayCards: [],
     currentPlayCleared: false,
+    humanMustBet: true,
     handScoreBreakdown: null,
     trickCards: [],
     ...rawState,
@@ -106,7 +107,7 @@ async function nextHand() {
 
 function render() {
   if (!state) return;
-  $('bet-panel').style.display = !state.bettingComplete && !state.gameWinner ? 'block' : 'none';
+  $('bet-panel').style.display = state.humanMustBet && !state.gameWinner ? 'block' : 'none';
   $('game-status').textContent = `Game to ${state.targetScore}: You ${state.cumulativeScore.human} — CPU ${state.cumulativeScore.cpu}`;
   $('target-score').textContent = state.targetScore;
   $('hand-number').textContent = state.handNumber;
@@ -116,7 +117,7 @@ function render() {
   $('next-hand').style.display = canStartNextHand ? 'inline-block' : 'none';
   $('next-hand').disabled = !canStartNextHand;
   $('cpu-cards').textContent = state.cpuCards;
-  $('cpu-wilds').innerHTML = state.cpuWilds.length ? `<p class="section-label">Visible wilds</p>${state.cpuWilds.map((card) => cardHtml(card, 'mini-card')).join('')}` : '<p class="section-label muted">No CPU wilds remaining</p>';
+  $('cpu-wilds').innerHTML = state.cpuWilds.length ? `Wilds: ${state.cpuWilds.map((card) => cardHtml(card, 'tiny-card')).join('')}` : 'No wilds';
   $('cpu-hand').innerHTML = Array.from({ length: Math.max(0, state.cpuCards - state.cpuWilds.length) }, () => '<span class="card-back"></span>').join('');
   $('turn').textContent = state.gameWinner ? `${state.gameWinner === 'human' ? 'You win' : 'CPU wins'} the game — ${state.cumulativeScore.human}–${state.cumulativeScore.cpu}` : state.handWinner ? `${state.handWinner === 'human' ? 'You win' : 'CPU wins'} the hand — score ${state.score.human}–${state.score.cpu}` : `${state.currentPlayer === 'human' ? 'Your' : 'CPU'} turn`;
   $('last-play').textContent = state.lastCombination ? `${state.lastPlayer === 'human' ? 'You' : 'CPU'} played ${state.lastCombination}` : 'No current trick.';
@@ -126,9 +127,9 @@ function render() {
   $('selected-cards').textContent = selectedCardNames();
   $('points').textContent = `Captured: You ${state.capturedPoints.human} · CPU ${state.capturedPoints.cpu}. Trick points: ${state.trickPoints}. Bets: You ${state.bets.human} · CPU ${state.bets.cpu}.`;
   $('score-breakdown').innerHTML = scoreBreakdownHtml();
-  $('hint').textContent = state.selectedHint;
+  $('hint').textContent = state.humanMustBet ? 'Place your bet before playing your first card.' : state.selectedHint;
   renderHand();
-  $('play-selected').disabled = !state.bettingComplete || state.currentPlayer !== 'human' || selected.size === 0 || Boolean(state.handWinner);
+  $('play-selected').disabled = state.humanMustBet || state.currentPlayer !== 'human' || selected.size === 0 || Boolean(state.handWinner);
   $('pass').disabled = !state.canPass || state.currentPlayer !== 'human' || Boolean(state.handWinner);
   $('move-count').textContent = state.legalMoveCount;
   $('legal-moves').innerHTML = state.legalMoves.map((move) => `<li>${escapeHtml(move.label)}</li>`).join('');
@@ -162,7 +163,7 @@ function scoreBreakdownHtml() {
 
 function selectedCardNames() {
   if (!state || selected.size === 0) return '—';
-  return orderedHumanHand().filter((card) => selected.has(card.key)).map((card) => card.name).join(' ');
+  return orderedHumanHand().filter((card) => selected.has(card.key)).map((card) => displayRank(card)).join(' ');
 }
 
 function orderedHumanHand() {
@@ -182,7 +183,7 @@ function renderHand() {
     button.disabled = Boolean(state.handWinner);
     button.dataset.cardKey = card.key;
     button.addEventListener('click', () => {
-      if (!state.bettingComplete || state.currentPlayer !== 'human' || state.handWinner) return;
+      if (state.humanMustBet || state.currentPlayer !== 'human' || state.handWinner) return;
       if (selected.has(card.key)) selected.delete(card.key);
       else selected.add(card.key);
       render();
@@ -275,11 +276,15 @@ function cardHtml(card, className = 'card') {
 }
 
 function cardFaceHtml(card) {
-  return `<span>${escapeHtml(card.name)}</span><span class="points">${card.points ? `${card.points}pt` : ''}</span><span class="wild">${card.wild ? 'wild' : ''}</span>`;
+  return `<span class="rank">${escapeHtml(displayRank(card))}</span><span class="stars">${'*'.repeat(card.points)}</span><span class="wild">${card.wild ? 'W' : ''}</span>`;
+}
+
+function displayRank(card) {
+  return card.rank;
 }
 
 function cardColorClass(card) {
-  return ['D', 'H'].includes(card.suit) ? 'red' : '';
+  return `suit-${card.suit.toLowerCase()}`;
 }
 
 function escapeHtml(value) {

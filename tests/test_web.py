@@ -13,6 +13,7 @@ class WebSessionTests(unittest.TestCase):
 
         initial = session.snapshot()
         self.assertFalse(initial["bettingComplete"])
+        self.assertTrue(initial["humanMustBet"])
         self.assertEqual(initial["targetScore"], 350)
         self.assertEqual(initial["cumulativeScore"], {"human": 0, "cpu": 0})
         self.assertIsNone(initial["gameWinner"])
@@ -25,7 +26,7 @@ class WebSessionTests(unittest.TestCase):
 
         session.place_human_bet(0)
         after_bet = session.snapshot()
-        self.assertTrue(after_bet["bettingComplete"])
+        self.assertFalse(after_bet["humanMustBet"])
         self.assertIn(after_bet["currentPlayer"], {"human", "cpu"})
 
         if after_bet["currentPlayer"] == "human" and after_bet["legalMoves"]:
@@ -89,7 +90,19 @@ class WebSessionTests(unittest.TestCase):
 
         self.assertEqual(session.hand_number, previous_hand + 1)
         self.assertFalse(session.betting_complete)
+        self.assertEqual(session.bets_placed, (False, False))
         self.assertIsNone(session.state.hand_winner)
+
+    def test_cpu_bets_before_first_cpu_play_not_before_human_play(self):
+        _session_id, session = HaggisWebApp().create_session(seed=1, cpu_name="greedy")
+        session.place_human_bet(0)
+        if session.state.current_player == session.human_player:
+            first_move = session.snapshot()["legalMoves"][0]
+            session.play_human_cards(first_move["cards"])
+
+        snapshot = session.snapshot()
+        self.assertTrue(snapshot["betsPlaced"]["cpu"])
+        self.assertIn("CPU bet", "\n".join(snapshot["log"]))
 
     def test_web_session_rejects_illegal_selection(self):
         _session_id, session = HaggisWebApp().create_session(seed=1, cpu_name="greedy")

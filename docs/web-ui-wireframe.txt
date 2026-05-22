@@ -1,141 +1,148 @@
 Haggis Web UI Wireframe
 =======================
 
-Current page structure
+Visual direction
+----------------
+
+Match kf.cafe:
+- black background
+- white terminal chrome
+- monospace text
+- sharp square panels/buttons/cards
+- minimal text in the play area
+- debugging/log details collapsed by default
+
+Card direction:
+- Do not use suit symbols as the primary card identity.
+- Use four card colors instead:
+  - Red
+  - Cyan
+  - Green
+  - Yellow
+- Card numbers/ranks should be much larger than they are now.
+- Show point value as repeated `*` marks instead of numeric point labels:
+  - J = `**`
+  - Q = `***`
+  - K = `*****`
+  - ordinary non-point cards = no stars
+- Wild cards should still be visually marked, but not by tiny point text.
+
+Example card rendering
 ----------------------
 
+Text wireframe cannot show color directly, so this uses color labels:
+
+┌───────┐  ┌───────┐  ┌───────┐  ┌───────┐
+│  RED  │  │ CYAN  │  │ GREEN │  │ YELLW │
+│       │  │       │  │       │  │       │
+│   6   │  │  10   │  │   J   │  │   K   │
+│       │  │       │  │       │  │       │
+│       │  │       │  │ ** W  │  │*****W│
+└───────┘  └───────┘  └───────┘  └───────┘
+
+Possible actual color treatment:
+- Keep cards black with white outlines.
+- Add a strong color strip, corner tag, or glow per suit/color.
+- Rank remains white and large for readability.
+- Stars can be white, or inherit the card color if that reads better.
+
+Current target layout
+---------------------
+
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Local preview                                                                │
-│ Haggis vs AI                                                [ New game ]      │
+│ KF.CAFE / HAGGIS                                      [ New game ]           │
+│ Game to 350: You 120 — CPU 85                                                │
+│ Hand 4 · Your turn · Bets: You 15 / CPU 0                                    │
 └──────────────────────────────────────────────────────────────────────────────┘
 
+Betting panel, only before the first play of a hand:
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Place your opening bet                                                       │
-│ Bet only if you think you can go out first.                                  │
-│                                                                              │
 │ [ No bet ]   [ Bet 15 ]   [ Bet 30 ]                                         │
 └──────────────────────────────────────────────────────────────────────────────┘
-Hidden after betting is complete.
 
-
-┌──────────────────────────────┐ ┌──────────────────────────────┐ ┌──────────────────────────────┐
-│ Game to 350                  │ │ CPU                          │ │ Trick                        │
-│                              │ │                              │ │                              │
-│ Hand 1                       │ │ 17 cards                     │ │ Your turn / CPU turn         │
-│                              │ │                              │ │                              │
-│ Cumulative: You 0 — CPU 0    │ │ Visible wilds                │ │ CPU played set rank 6        │
-│                              │ │ [ J♠* ] [ Q♠* ] [ K♠* ]      │ │                              │
-│ [ Next hand ]                │ │                              │ │ Last played cards            │
-│ only shown after hand ends   │ │ Hidden non-wild cards        │ │ [ 6♣ ] [ 6♦ ] [ J♠* ]        │
-│                              │ │ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒       │ │                              │
-│                              │ │                              │ │ Current trick cards          │
-│                              │ │                              │ │ [ 7♣ ] [ 9♣ ] [ K♠* ]       │
-│                              │ │                              │ │ [ 6♣ ] [ 6♦ ] [ J♠* ]       │
-│                              │ │                              │ │                              │
-│                              │ │                              │ │ Captured: you 12, CPU 8.     │
-│                              │ │                              │ │ Trick points: 5.             │
-│                              │ │                              │ │ Bets: you 0, CPU 15.         │
-└──────────────────────────────┘ └──────────────────────────────┘ └──────────────────────────────┘
-
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Your hand                                                     [ Play ] [ Pass ]│
-│ Select cards to play.                                                        │
-│                                                                              │
-│ [ 2♦ ] [ 3♣ ] [ 4♥ ] [ 5♠ ] [ 6♣ ] [ 7♦ ] [ 8♠ ] [ 9♣ ]                    │
-│ [ 10♥] [ J♥*] [ Q♥*] [ K♥*] ...                                             │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ ▸ 123 legal moves                                                            │
-│                                                                              │
-│ Expanded:                                                                    │
-│  1. 10♣ Q♥* K♥* (sequence rank 12, 8 pts)                                    │
-│  2. 10♦ Q♥* K♥* (sequence rank 12, 8 pts)                                    │
-│  ...                                                                         │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Log                                                                          │
-│                                                                              │
-│ 1. Game started. First to 350.                                                │
-│ 2. You bet 0.                                                                │
-│ 3. CPU bet 15.                                                               │
-│ 4. CPU: 7♣ 9♣ K♠* (sequence rank 9, 5 pts)                                   │
-│ 5. You: 10♣ Q♥* K♥* (sequence rank 12, 8 pts)                                │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-
-Current layout summary
-----------------------
-
-Header
-Bet panel, if pre-hand betting is active
-Three-column status row:
-  1. Game score / hand number
-  2. CPU hidden hand + visible wilds
-  3. Trick state + played cards
-Your hand panel
-Collapsible legal moves panel
-Log panel
-
-
-Open layout questions
----------------------
-
-1. Trick panel may be doing too much.
-   It contains turn status, last play text, last played cards, all current trick
-   cards, points, and bets.
-
-2. The player's decision area may be too low.
-   In a card game UI, the human hand and current playable context probably need
-   to dominate the screen.
-
-3. Legal moves and log are developer/debug aids.
-   They are useful, but probably should be secondary side panels or collapsible
-   drawers.
-
-4. "Last played cards" vs "Current trick cards" may be confusing.
-   Possible clearer labels:
-   - Current winning play
-   - Trick pile
-
-
-Possible next layout
---------------------
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Haggis vs AI                         Game to 350: You 120 — CPU 85 [New Game]│
-│ Hand 4 · Your turn · Bets: You 15 / CPU 0                                    │
-└──────────────────────────────────────────────────────────────────────────────┘
+Main play row:
 
 ┌──────────────────────────────┐ ┌─────────────────────────────────────────────┐
 │ CPU                          │ │ Current Trick                               │
 │ 11 unknown cards             │ │                                             │
-│ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒        │ │ 					       │
-│                              │ │ [ 7♣ ] [ 9♣ ] [ K♠* ]                       │
-│ Visible wilds                │ │                                             │
-│ [ Q♠* ] [ K♠* ]              │ │ 	                                       │
-│                              │ │				               │
-│                              │ │ 					       │
+│ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒        │ │   ┌───────┐ ┌───────┐ ┌───────┐             │
+│                              │ │   │ GREEN │ │ RED   │ │ YELLW │             │
+│ Visible wilds                │ │   │   7   │ │   9   │ │   K   │             │
+│ ┌───────┐ ┌───────┐          │ │   │       │ │       │ │*****W│             │
+│ │ CYAN  │ │ YELLW │          │ │   └───────┘ └───────┘ └───────┘             │
+│ │   Q   │ │   K   │          │ │                                             │
+│ │ ***W  │ │*****W│          │ │ Stack cleared.                              │
+│ └───────┘ └───────┘          │ │ only shown briefly/when relevant            │
 └──────────────────────────────┘ └─────────────────────────────────────────────┘
 
+Notes:
+- Current Trick should primarily display cards, not text like
+  "CPU played set rank 4".
+- If CPU passes, clear the visible stack and show a small "Stack cleared" state.
+- Opponent wild cards remain visible if still held by the CPU.
+
+Player hand:
+
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Your hand                                      Selected: 10♣ Q♥* K♥*         │
-│                                                			       │
+│ Your hand                                      Selected: 10  Q  K             │
 │                                                                              │
-│ [ 2♦ ] [ 3♣ ] [ 4♥ ] [ 5♠ ] [ 6♣ ] [ 7♦ ] [ 8♠ ] [ 9♣ ]                      │
-│ [ 10♣] [ J♥*] [ Q♥*] [ K♥*]                                                  │
+│ [ Sort by number ] [ Sort by suit/color ]       [ Play selected ] [ Pass ]   │
 │                                                                              │
-│                                      [ Play selected ] [ Pass ]              │
+│ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐                 │
+│ │ RED   │ │ CYAN  │ │ GREEN │ │ YELLW │ │ RED   │ │ CYAN  │                 │
+│ │   2   │ │   3   │ │   4   │ │   5   │ │   6   │ │   7   │                 │
+│ └───────┘ └───────┘ └───────┘ └───────┘ └───────┘ └───────┘                 │
+│                                                                              │
+│ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐                                     │
+│ │ GREEN │ │ RED   │ │ CYAN  │ │ YELLW │                                     │
+│ │  10   │ │   J   │ │   Q   │ │   K   │                                     │
+│ │       │ │ ** W  │ │ ***W  │ │*****W│                                     │
+│ └───────┘ └───────┘ └───────┘ └───────┘                                     │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-┌───────────────────────┐ ┌──────────────────────────────────────────────────┐
-│ Hand scoring          │ │ Log / details                                     │
-│ Captured: You 12 CPU 8│ │ collapsed by default                              │
-│ Trick points: 5       │ │                                                  │
-│ Haggis: hidden        │ │                                                  │
-└───────────────────────┘ └──────────────────────────────────────────────────┘
+Drag/drop behavior:
+- Cards can be reordered before betting.
+- While dragging, show a bright vertical insertion line before/after the target.
+- Sort by number orders by rank, then color.
+- Sort by suit/color groups by Red, Cyan, Green, Yellow, then rank.
+
+Secondary details:
+
+┌──────────────────────────────┐ ┌─────────────────────────────────────────────┐
+│ Hand scoring                 │ │ Log / details                               │
+│ Captured: You 12 · CPU 8     │ │ collapsed by default                        │
+│ Trick points: 5              │ │                                             │
+│                              │ │ ▸ 123 legal moves                           │
+│ End-of-hand breakdown:       │ │ ▸ action log                                │
+│ Source              You CPU  │ │                                             │
+│ Captured cards       12   8  │ │                                             │
+│ Leftover bonus       25   0  │ │                                             │
+│ Haggis points         5   0  │ │                                             │
+│ Bets                 15   0  │ │                                             │
+│ Total                57   8  │ │                                             │
+│                              │ │                                             │
+│ [ Next hand ]                │ │                                             │
+└──────────────────────────────┘ └─────────────────────────────────────────────┘
+
+Implementation notes from iteration
+-----------------------------------
+
+Already implemented:
+- browser UI served by `python3 -m haggis.web`
+- deployed Haggis service on Render
+- `/haggis` page on kf.cafe embeds the Render service
+- kf.cafe terminal theme applied to the game UI
+- game to 350
+- CPU wilds visible
+- current play cards displayed as cards
+- stack clears when CPU/player passes
+- end-of-hand scoring breakdown
+- drag/drop hand ordering
+- sort by number and sort by suit
+
+Next visual change requested:
+- Replace suit-symbol identity with Red/Cyan/Green/Yellow identity.
+- Increase card rank size substantially.
+- Replace numeric point labels with repeated stars.

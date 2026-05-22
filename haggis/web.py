@@ -26,6 +26,7 @@ class WebGameSession:
     cpu_player: int = 1
     turn_log: list[str] | None = None
     betting_complete: bool = False
+    bets_placed: tuple[bool, bool] = (False, False)
     max_cpu_turns: int = 100
     target_score: int = 350
     base_seed: int = 1
@@ -41,15 +42,12 @@ class WebGameSession:
             self.turn_log = []
 
     def place_human_bet(self, amount: int) -> None:
-        if self.betting_complete:
-            raise ValueError("betting is already complete")
+        if self.bets_placed[self.human_player]:
+            raise ValueError("you have already bet this hand")
         self.state = self.state.place_bet(self.human_player, amount)
-        chooser = getattr(self.cpu, "choose_bet", None)
-        cpu_bet = chooser(self.state, self.cpu_player) if chooser is not None else 0
-        self.state = self.state.place_bet(self.cpu_player, cpu_bet)
-        self.betting_complete = True
+        self.bets_placed = _replace_bool(self.bets_placed, self.human_player, True)
+        self.betting_complete = all(self.bets_placed)
         self.turn_log.append(f"You bet {amount}.")
-        self.turn_log.append(f"CPU bet {cpu_bet}.")
         self.play_cpu_until_human_turn()
 
     def play_human_cards(self, card_keys: list[str]) -> None:
@@ -79,6 +77,7 @@ class WebGameSession:
         self.latest_played_cards = ()
         self.latest_play_cleared = False
         self.hand_score_breakdown = None
+        self.bets_placed = (False, False)
         self.betting_complete = False
         self.turn_log.append(f"Hand {self.hand_number} started. First to {self.target_score}.")
 
@@ -93,12 +92,12 @@ class WebGameSession:
     def play_cpu_until_human_turn(self) -> None:
         turns = 0
         while (
-            self.betting_complete
-            and self.state.hand_winner is None
+            self.state.hand_winner is None
             and self.state.current_player == self.cpu_player
         ):
             if turns >= self.max_cpu_turns:
                 raise RuntimeError("CPU turn loop exceeded safety limit")
+            self._place_cpu_bet_if_needed()
             move = self.cpu.choose_move(self.state)
             if move not in self.state.legal_moves():
                 raise ValueError(f"CPU chose an illegal move: {move}")
@@ -107,7 +106,8 @@ class WebGameSession:
 
     def snapshot(self) -> dict[str, Any]:
         state = self.state
-        legal_moves = state.legal_moves() if state.hand_winner is None and self.betting_complete else ()
+        human_must_bet = self._must_bet(self.human_player)
+        legal_moves = state.legal_moves() if state.hand_winner is None and not human_must_bet else ()
         human_legal_moves = legal_moves if state.current_player == self.human_player else ()
         hand_score = state.score_hand().points if state.hand_winner is not None else None
         game_winner = self.game_winner
@@ -117,6 +117,8 @@ class WebGameSession:
             "cumulativeScore": {"human": self.cumulative_score[self.human_player], "cpu": self.cumulative_score[self.cpu_player]},
             "gameWinner": None if game_winner is None else ("human" if game_winner == self.human_player else "cpu"),
             "bettingComplete": self.betting_complete,
+            "betsPlaced": {"human": self.bets_placed[self.human_player], "cpu": self.bets_placed[self.cpu_player]},
+            "humanMustBet": human_must_bet,
             "currentPlayer": "human" if state.current_player == self.human_player else "cpu",
             "handWinner": None if state.hand_winner is None else ("human" if state.hand_winner == self.human_player else "cpu"),
             "score": None if hand_score is None else {"human": hand_score[self.human_player], "cpu": hand_score[self.cpu_player]},
@@ -144,12 +146,25 @@ class WebGameSession:
         }
 
     def _require_human_turn(self) -> None:
-        if not self.betting_complete:
-            raise ValueError("place a bet before playing")
+        if self._must_bet(self.human_player):
+            raise ValueError("place a bet before playing your first card")
         if self.state.hand_winner is not None:
             raise ValueError("hand is already complete")
         if self.state.current_player != self.human_player:
             raise ValueError("it is not your turn")
+
+    def _must_bet(self, player: int) -> bool:
+        return not self.bets_placed[player] and not self.state.has_played[player] and self.state.current_player == player and self.state.hand_winner is None
+
+    def _place_cpu_bet_if_needed(self) -> None:
+        if not self._must_bet(self.cpu_player):
+            return
+        chooser = getattr(self.cpu, "choose_bet", None)
+        cpu_bet = chooser(self.state, self.cpu_player) if chooser is not None else 0
+        self.state = self.state.place_bet(self.cpu_player, cpu_bet)
+        self.bets_placed = _replace_bool(self.bets_placed, self.cpu_player, True)
+        self.betting_complete = all(self.bets_placed)
+        self.turn_log.append(f"CPU bet {cpu_bet}.")
 
     def _move_from_card_keys(self, card_keys: list[str]) -> Move | None:
         requested = sorted(card_keys)
@@ -204,6 +219,12 @@ class WebGameSession:
         self.state = self.state.apply_move(move).assert_invariants(full_deck=True)
         if self.state.hand_winner is not None:
             self._record_completed_hand()
+
+
+def _replace_bool(values: tuple[bool, bool], index: int, value: bool) -> tuple[bool, bool]:
+    updated = list(values)
+    updated[index] = value
+    return tuple(updated)  # type: ignore[return-value]
 
 
 def _last_played_cards(state: HaggisState, latest_played_cards: tuple[Card, ...] = ()) -> tuple[Card, ...]:
