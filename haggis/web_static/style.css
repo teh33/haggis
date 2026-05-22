@@ -36,7 +36,9 @@ h3 { font-size: 0.82rem; }
 .hand-actions button { padding: 0.48rem 0.58rem; font-size: 0.74rem; }
 .hand { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 8px; }
 .card, .mini-card, .tiny-card { border-radius: 0; background: #000; color: #fff; border: 1px solid rgba(255,255,255,.72); box-shadow: 0 0 10px rgba(255,255,255,.12), inset 0 0 10px rgba(255,255,255,.04); display: grid; place-items: center; position: relative; font-family: "Courier New", monospace; overflow: hidden; }
-.card::before, .mini-card::before, .tiny-card::before { content: ""; position: absolute; inset: 8px; background: var(--card-color); border: 1px solid #fff; opacity: 0.9; box-shadow: 0 0 14px var(--card-color); z-index: 0; }
+.card::before, .mini-card::before, .tiny-card::before { content: ""; position: absolute; inset: 8px; background: var(--card-color); border: 1px solid #fff; opacity: 0.9; z-index: 0; }
+.card:not(.wild-card)::before, .mini-card:not(.wild-card)::before, .tiny-card:not(.wild-card)::before { box-shadow: 0 0 14px var(--card-color); }
+.wild-card::before { box-shadow: 0 0 18px rgba(0,213,255,.45), 0 0 24px rgba(123,63,105,.35); }
 .rank, .stars, .wild { position: relative; z-index: 1; text-shadow: 0 1px 2px #000, 0 0 6px #000; }
 .card { width: 76px; height: 106px; font-weight: 700; }
 .card .rank { font-size: 2.35rem; line-height: 1; }
@@ -53,6 +55,7 @@ h3 { font-size: 0.82rem; }
 .suit-d { --card-color: #00d5ff; }
 .suit-h { --card-color: #0a7f3f; }
 .suit-s { --card-color: #c99a16; }
+.wild-card { --card-color: linear-gradient(135deg, #7b3f69 0%, #00d5ff 32%, #c99a16 66%, #0a7f3f 100%); }
 .cpu-hand, .mini-hand, .trick-cards { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cpu-hand { margin-bottom: 16px; }
 .mini-hand { min-height: 52px; margin-bottom: 10px; }

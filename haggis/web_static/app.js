@@ -129,7 +129,10 @@ function render() {
   $('score-breakdown').innerHTML = scoreBreakdownHtml();
   $('hint').textContent = state.humanMustBet ? 'Place your bet before playing your first card.' : state.selectedHint;
   renderHand();
-  $('play-selected').disabled = state.humanMustBet || state.currentPlayer !== 'human' || selected.size === 0 || Boolean(state.handWinner);
+  const playableSelection = selected.size > 0 && !state.humanMustBet && state.currentPlayer === 'human' && !state.handWinner;
+  $('play-selected').style.display = playableSelection ? 'inline-block' : 'none';
+  $('pass').style.display = playableSelection ? 'none' : 'inline-block';
+  $('play-selected').disabled = !playableSelection;
   $('pass').disabled = !state.canPass || state.currentPlayer !== 'human' || Boolean(state.handWinner);
   $('move-count').textContent = state.legalMoveCount;
   $('legal-moves').innerHTML = state.legalMoves.map((move) => `<li>${escapeHtml(move.label)}</li>`).join('');
@@ -284,7 +287,7 @@ function displayRank(card) {
 }
 
 function cardColorClass(card) {
-  return `suit-${card.suit.toLowerCase()}`;
+  return card.wild ? 'wild-card' : `suit-${card.suit.toLowerCase()}`;
 }
 
 function escapeHtml(value) {
