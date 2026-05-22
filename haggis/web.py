@@ -261,7 +261,7 @@ def new_session(seed: int | None = None, cpu_name: str = "policy-rollout", targe
     if target_score < 1:
         raise ValueError("target_score must be at least 1")
     actual_seed = Random().randrange(1, 1_000_000_000) if seed is None else seed
-    cpu = make_bot(cpu_name, seed=actual_seed * 2 + 1, policy_model="models/linear_policy.json", search_root_moves=4, search_rollout_turns=40)
+    cpu = make_bot(cpu_name, seed=actual_seed * 2 + 1, policy_model="models/linear_policy.json")
     state = HaggisState.new_deal(seed=actual_seed, dealer=1).assert_invariants(full_deck=True)
     return WebGameSession(state=state, cpu=cpu, target_score=target_score, base_seed=actual_seed, dealer=1, turn_log=[f"Game started. First to {target_score}."])
 
