@@ -40,7 +40,7 @@ h3 { font-size: 0.82rem; }
 .rank, .stars, .wild { position: relative; z-index: 1; text-shadow: 0 1px 2px #000, 0 0 6px #000; }
 .card { width: 76px; height: 106px; font-weight: 700; }
 .card .rank { font-size: 2.35rem; line-height: 1; }
-.card.selected { transform: translateY(-12px); border-color: #fff; background: #fff; color: #000; box-shadow: 0 0 16px rgba(255,255,255,.45); }
+.card.selected { transform: translateY(-12px); border-color: #fff; background: #fff; color: #fff; box-shadow: 0 0 16px rgba(255,255,255,.45); }
 .card.selected::before { box-shadow: none; opacity: 1; }
 .card.dragging { opacity: 0.55; transform: translateY(-8px); }
 .card.drop-before::after,
@@ -49,7 +49,7 @@ h3 { font-size: 0.82rem; }
 .card.drop-after::after { right: -9px; }
 .stars { position: absolute; right: 14px; bottom: 12px; font-size: 0.82rem; letter-spacing: -0.08em; color: currentColor; opacity: 0.95; }
 .wild { position: absolute; left: 16px; bottom: 12px; color: currentColor; font-size: 0.78rem; opacity: 0.95; text-transform: uppercase; }
-.suit-c { --card-color: #ff3b30; }
+.suit-c { --card-color: #7b3f69; }
 .suit-d { --card-color: #00d5ff; }
 .suit-h { --card-color: #0a7f3f; }
 .suit-s { --card-color: #c99a16; }

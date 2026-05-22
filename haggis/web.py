@@ -193,16 +193,28 @@ class WebGameSession:
         leftover_points = sum(card.points for card in self.state.hands[loser])
         haggis_points = sum(card.points for card in self.state.haggis)
         bet_awards = [0, 0]
-        for player, bet in enumerate(self.state.bets):
-            if bet:
-                bet_awards[player if player == winner else 1 - player] += bet
         rows = [
-            {"label": "Captured point cards", "human": captured[self.human_player], "cpu": captured[self.cpu_player]},
-            {"label": "Winner leftover-card bonus", "human": leftover_count_bonus if winner == self.human_player else 0, "cpu": leftover_count_bonus if winner == self.cpu_player else 0},
-            {"label": "Winner takes loser leftover points", "human": leftover_points if winner == self.human_player else 0, "cpu": leftover_points if winner == self.cpu_player else 0},
-            {"label": "Winner takes haggis points", "human": haggis_points if winner == self.human_player else 0, "cpu": haggis_points if winner == self.cpu_player else 0},
-            {"label": "Bets", "human": bet_awards[self.human_player], "cpu": bet_awards[self.cpu_player]},
+            {
+                "label": "5xCaptured cards",
+                "human": captured[self.human_player]
+                + (leftover_points if winner == self.human_player else 0)
+                + (haggis_points if winner == self.human_player else 0),
+                "cpu": captured[self.cpu_player]
+                + (leftover_points if winner == self.cpu_player else 0)
+                + (haggis_points if winner == self.cpu_player else 0),
+            },
+            {
+                "label": "Leftover-card bonus",
+                "human": leftover_count_bonus if winner == self.human_player else 0,
+                "cpu": leftover_count_bonus if winner == self.cpu_player else 0,
+            },
         ]
+        for player, bet in enumerate(self.state.bets):
+            if not bet:
+                continue
+            label = "Big Bet" if bet == 30 else "Little Bet" if bet == 15 else f"Bet {bet}"
+            award_player = player if player == winner else 1 - player
+            rows.append({"label": label, "human": bet if award_player == self.human_player else 0, "cpu": bet if award_player == self.cpu_player else 0})
         return {
             "winner": "human" if winner == self.human_player else "cpu",
             "loserCardsRemaining": len(self.state.hands[loser]),
