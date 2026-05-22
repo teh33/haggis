@@ -1,0 +1,141 @@
+Haggis Web UI Wireframe
+=======================
+
+Current page structure
+----------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Local preview                                                                │
+│ Haggis vs AI                                                [ New game ]      │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Place your opening bet                                                       │
+│ Bet only if you think you can go out first.                                  │
+│                                                                              │
+│ [ No bet ]   [ Bet 15 ]   [ Bet 30 ]                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+Hidden after betting is complete.
+
+
+┌──────────────────────────────┐ ┌──────────────────────────────┐ ┌──────────────────────────────┐
+│ Game to 350                  │ │ CPU                          │ │ Trick                        │
+│                              │ │                              │ │                              │
+│ Hand 1                       │ │ 17 cards                     │ │ Your turn / CPU turn         │
+│                              │ │                              │ │                              │
+│ Cumulative: You 0 — CPU 0    │ │ Visible wilds                │ │ CPU played set rank 6        │
+│                              │ │ [ J♠* ] [ Q♠* ] [ K♠* ]      │ │                              │
+│ [ Next hand ]                │ │                              │ │ Last played cards            │
+│ only shown after hand ends   │ │ Hidden non-wild cards        │ │ [ 6♣ ] [ 6♦ ] [ J♠* ]        │
+│                              │ │ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒       │ │                              │
+│                              │ │                              │ │ Current trick cards          │
+│                              │ │                              │ │ [ 7♣ ] [ 9♣ ] [ K♠* ]       │
+│                              │ │                              │ │ [ 6♣ ] [ 6♦ ] [ J♠* ]       │
+│                              │ │                              │ │                              │
+│                              │ │                              │ │ Captured: you 12, CPU 8.     │
+│                              │ │                              │ │ Trick points: 5.             │
+│                              │ │                              │ │ Bets: you 0, CPU 15.         │
+└──────────────────────────────┘ └──────────────────────────────┘ └──────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Your hand                                                     [ Play ] [ Pass ]│
+│ Select cards to play.                                                        │
+│                                                                              │
+│ [ 2♦ ] [ 3♣ ] [ 4♥ ] [ 5♠ ] [ 6♣ ] [ 7♦ ] [ 8♠ ] [ 9♣ ]                    │
+│ [ 10♥] [ J♥*] [ Q♥*] [ K♥*] ...                                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ▸ 123 legal moves                                                            │
+│                                                                              │
+│ Expanded:                                                                    │
+│  1. 10♣ Q♥* K♥* (sequence rank 12, 8 pts)                                    │
+│  2. 10♦ Q♥* K♥* (sequence rank 12, 8 pts)                                    │
+│  ...                                                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Log                                                                          │
+│                                                                              │
+│ 1. Game started. First to 350.                                                │
+│ 2. You bet 0.                                                                │
+│ 3. CPU bet 15.                                                               │
+│ 4. CPU: 7♣ 9♣ K♠* (sequence rank 9, 5 pts)                                   │
+│ 5. You: 10♣ Q♥* K♥* (sequence rank 12, 8 pts)                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+Current layout summary
+----------------------
+
+Header
+Bet panel, if pre-hand betting is active
+Three-column status row:
+  1. Game score / hand number
+  2. CPU hidden hand + visible wilds
+  3. Trick state + played cards
+Your hand panel
+Collapsible legal moves panel
+Log panel
+
+
+Open layout questions
+---------------------
+
+1. Trick panel may be doing too much.
+   It contains turn status, last play text, last played cards, all current trick
+   cards, points, and bets.
+
+2. The player's decision area may be too low.
+   In a card game UI, the human hand and current playable context probably need
+   to dominate the screen.
+
+3. Legal moves and log are developer/debug aids.
+   They are useful, but probably should be secondary side panels or collapsible
+   drawers.
+
+4. "Last played cards" vs "Current trick cards" may be confusing.
+   Possible clearer labels:
+   - Current winning play
+   - Trick pile
+
+
+Possible next layout
+--------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Haggis vs AI                         Game to 350: You 120 — CPU 85 [New Game]│
+│ Hand 4 · Your turn · Bets: You 15 / CPU 0                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────┐ ┌─────────────────────────────────────────────┐
+│ CPU                          │ │ Current Trick                               │
+│ 11 unknown cards             │ │                                             │
+│ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒ ▒        │ │ 					       │
+│                              │ │ [ 7♣ ] [ 9♣ ] [ K♠* ]                       │
+│ Visible wilds                │ │                                             │
+│ [ Q♠* ] [ K♠* ]              │ │ 	                                       │
+│                              │ │				               │
+│                              │ │ 					       │
+└──────────────────────────────┘ └─────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Your hand                                      Selected: 10♣ Q♥* K♥*         │
+│                                                			       │
+│                                                                              │
+│ [ 2♦ ] [ 3♣ ] [ 4♥ ] [ 5♠ ] [ 6♣ ] [ 7♦ ] [ 8♠ ] [ 9♣ ]                      │
+│ [ 10♣] [ J♥*] [ Q♥*] [ K♥*]                                                  │
+│                                                                              │
+│                                      [ Play selected ] [ Pass ]              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────┐ ┌──────────────────────────────────────────────────┐
+│ Hand scoring          │ │ Log / details                                     │
+│ Captured: You 12 CPU 8│ │ collapsed by default                              │
+│ Trick points: 5       │ │                                                  │
+│ Haggis: hidden        │ │                                                  │
+└───────────────────────┘ └──────────────────────────────────────────────────┘

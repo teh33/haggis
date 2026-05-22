@@ -3,7 +3,14 @@ from __future__ import annotations
 import unittest
 
 from haggis import HaggisState
-from haggis.play import format_cards, format_move, play_player_vs_cpu, prompt_bet, prompt_move
+from haggis.play import (
+    format_cards,
+    format_legal_moves,
+    format_move,
+    play_player_vs_cpu,
+    prompt_bet,
+    prompt_move,
+)
 
 
 def c(rank: int, suit: str = "C"):
@@ -38,12 +45,38 @@ class PlayTests(unittest.TestCase):
 
         self.assertEqual(format_cards(selected.cards), "3♣")
 
-    def test_format_move_describes_pass_and_points(self):
-        state = HaggisState(hands=((c(3), c(4)), (c(5),)), haggis=(c(6),), current_player=0)
-        move = state.legal_moves()[0]
+    def test_prompt_move_does_not_dump_all_legal_moves_by_default(self):
+        state = HaggisState.new_deal(seed=1)
+        answers = iter(["q"])
+        outputs: list[str] = []
 
-        self.assertEqual(format_move(state.apply_move(move).legal_moves()[-1]), "pass")
-        self.assertIn("pts", format_move(move))
+        with self.assertRaises(KeyboardInterrupt):
+            prompt_move(state, lambda _prompt: next(answers), outputs.append)
+
+        joined = "\n".join(outputs)
+        self.assertIn("Legal options:", joined)
+        self.assertIn("Type 'moves'", joined)
+        self.assertNotIn("Legal moves:", joined)
+
+    def test_prompt_move_can_browse_limited_legal_moves_on_request(self):
+        state = HaggisState.new_deal(seed=1)
+        answers = iter(["moves", "q"])
+        outputs: list[str] = []
+
+        with self.assertRaises(KeyboardInterrupt):
+            prompt_move(state, lambda _prompt: next(answers), outputs.append)
+
+        browsed = "\n".join(outputs)
+        self.assertIn("Legal moves:", browsed)
+        self.assertIn("more", browsed)
+
+    def test_format_legal_moves_can_show_every_move(self):
+        legal_moves = HaggisState.new_deal(seed=1).legal_moves()
+
+        formatted = format_legal_moves(legal_moves, limit=None)
+
+        self.assertEqual(formatted.count("\n  "), len(legal_moves))
+        self.assertNotIn("more", formatted)
 
     def test_player_vs_cpu_can_quit_cleanly(self):
         answers = iter(["0", "q"])

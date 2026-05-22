@@ -2,7 +2,7 @@ from itertools import combinations
 from random import Random
 import unittest
 
-from haggis import Card, Rank, Suit, can_beat, legal_moves, player_wilds, standard_deck, validate_combination
+from haggis import Card, Rank, Suit, can_beat, legal_moves, player_wilds, possible_combinations, standard_deck, validate_combination
 from haggis.engine import Move
 
 
@@ -14,11 +14,11 @@ def brute_force_legal_moves(hand, previous=None):
     moves = {}
     for size in range(1, len(hand) + 1):
         for cards in combinations(hand, size):
-            combination = validate_combination(cards)
-            if combination is None or not can_beat(combination, previous):
-                continue
-            move = Move(cards=tuple(sorted(cards)), combination=combination)
-            moves[_move_key(move)] = move
+            for combination in possible_combinations(cards):
+                if not can_beat(combination, previous):
+                    continue
+                move = Move(cards=tuple(sorted(cards)), combination=combination)
+                moves[_move_key(move)] = move
 
     ordered = sorted(moves.values(), key=lambda move: move.combination.sort_key())
     if previous is not None:

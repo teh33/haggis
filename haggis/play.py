@@ -55,15 +55,22 @@ def prompt_move(state: HaggisState, input_fn: InputFn = input, output_fn: Output
         raise ValueError("no legal moves available")
 
     output_fn(format_state_for_human(state))
-    output_fn("Legal moves:")
-    for index, move in enumerate(legal_moves, 1):
-        output_fn(f"  {index:>2}. {format_move(move)}")
+    output_fn(format_move_prompt(legal_moves))
 
     while True:
-        raw = input_fn("Choose move number, cards, or q to quit: ").strip()
+        raw = input_fn("Choose cards, move number, 'moves', 'pass', or q: ").strip()
         lowered = raw.lower()
         if lowered in {"q", "quit", "exit"}:
             raise KeyboardInterrupt("player quit")
+        if lowered in {"?", "h", "help"}:
+            output_fn(format_move_help())
+            continue
+        if lowered in {"m", "moves"}:
+            output_fn(format_legal_moves(legal_moves, limit=30))
+            continue
+        if lowered in {"all", "moves all", "all moves"}:
+            output_fn(format_legal_moves(legal_moves, limit=None))
+            continue
         if lowered in {"p", "pass"}:
             pass_move = next((move for move in legal_moves if move.is_pass), None)
             if pass_move is not None:
@@ -76,7 +83,11 @@ def prompt_move(state: HaggisState, input_fn: InputFn = input, output_fn: Output
             selected_move = _move_by_card_names(raw, legal_moves)
             if selected_move is not None:
                 return selected_move
-            output_fn("Enter a legal move number, exact card names like '3♣ 3♦', 'pass', or 'q'.")
+            matching_moves = _moves_containing_card_names(raw, legal_moves)
+            if matching_moves:
+                output_fn(format_legal_moves(matching_moves, limit=20, heading=f"Legal moves containing {raw!r}:"))
+                continue
+            output_fn("Enter exact cards like '3C 3D', 'moves' to browse, 'pass', or 'q'.")
             continue
         if 1 <= selected <= len(legal_moves):
             return legal_moves[selected - 1]
@@ -140,6 +151,57 @@ def play_player_vs_cpu(
     return PlayerCpuResult(winner=score.winner, score=score.points, turns=turns, bets=state.bets)
 
 
+def format_move_prompt(legal_moves: tuple[Move, ...]) -> str:
+    playable_count = sum(1 for move in legal_moves if not move.is_pass)
+    pass_hint = ", or pass" if any(move.is_pass for move in legal_moves) else ""
+    examples = _example_card_inputs(legal_moves, limit=3)
+    lines = [
+        f"Legal options: {playable_count} playable move{'s' if playable_count != 1 else ''}{pass_hint}.",
+        "Select cards directly instead of browsing every legal move.",
+    ]
+    if examples:
+        lines.append(f"Examples: {', '.join(examples)}")
+    lines.append("Type 'moves' to show the first 30 legal moves, 'all' to show every move, '?' for help.")
+    return "\n".join(lines)
+
+
+def format_move_help() -> str:
+    return "\n".join(
+        [
+            "Input help:",
+            "  3C 3D      play those exact cards if legal",
+            "  3♣ 3♦      unicode suit names also work",
+            "  moves      show a compact move list",
+            "  all        show every legal move",
+            "  pass       pass when legal",
+            "  q          quit",
+        ]
+    )
+
+
+def format_legal_moves(legal_moves: tuple[Move, ...], *, limit: int | None, heading: str = "Legal moves:") -> str:
+    shown_moves = legal_moves if limit is None else legal_moves[:limit]
+    index_width = max(2, len(str(len(legal_moves))))
+    lines = [heading]
+    for index, move in enumerate(shown_moves, 1):
+        lines.append(f"  {index:>{index_width}}. {format_move(move)}")
+    hidden_count = len(legal_moves) - len(shown_moves)
+    if hidden_count > 0:
+        lines.append(f"  … {hidden_count} more. Type 'all' to show everything, or enter exact cards.")
+    return "\n".join(lines)
+
+
+def _example_card_inputs(legal_moves: tuple[Move, ...], *, limit: int) -> list[str]:
+    examples = []
+    for move in legal_moves:
+        if move.is_pass:
+            continue
+        examples.append(_format_cards_ascii(move.cards))
+        if len(examples) >= limit:
+            break
+    return examples
+
+
 def format_state_for_human(state: HaggisState) -> str:
     player = state.current_player
     opponent = 1 - player
@@ -175,15 +237,44 @@ def format_combination(combination) -> str:
 
 
 def _move_by_card_names(raw: str, legal_moves: tuple[Move, ...]) -> Move | None:
-    requested = sorted(token.strip().lower() for token in raw.replace(",", " ").split() if token.strip())
+    requested = _parse_card_names(raw)
     if not requested:
         return None
     for move in legal_moves:
-        names = sorted(card.short_name().lower() for card in move.cards)
-        ascii_names = sorted(_ascii_card_name(card).lower() for card in move.cards)
-        if requested in (names, ascii_names):
+        if requested in (_card_name_keys(move.cards), _ascii_card_name_keys(move.cards)):
             return move
     return None
+
+
+def _moves_containing_card_names(raw: str, legal_moves: tuple[Move, ...]) -> tuple[Move, ...]:
+    requested = _parse_card_names(raw)
+    if not requested:
+        return ()
+    matches = []
+    for move in legal_moves:
+        if move.is_pass:
+            continue
+        name_keys = _card_name_keys(move.cards)
+        ascii_keys = _ascii_card_name_keys(move.cards)
+        if all(card in name_keys for card in requested) or all(card in ascii_keys for card in requested):
+            matches.append(move)
+    return tuple(matches)
+
+
+def _parse_card_names(raw: str) -> list[str]:
+    return sorted(token.strip().lower() for token in raw.replace(",", " ").split() if token.strip())
+
+
+def _card_name_keys(cards: tuple[Card, ...]) -> list[str]:
+    return sorted(card.short_name().lower() for card in cards)
+
+
+def _ascii_card_name_keys(cards: tuple[Card, ...]) -> list[str]:
+    return sorted(_ascii_card_name(card).lower() for card in cards)
+
+
+def _format_cards_ascii(cards: tuple[Card, ...]) -> str:
+    return " ".join(_ascii_card_name(card) for card in cards)
 
 
 def _ascii_card_name(card: Card) -> str:

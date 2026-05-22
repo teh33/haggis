@@ -1,6 +1,6 @@
 import unittest
 
-from haggis import Card, CombinationType, Rank, Suit, can_beat, validate_combination
+from haggis import Card, CombinationType, HaggisState, Rank, Suit, can_beat, validate_combination
 
 
 def c(rank, suit=Suit.CLUBS, wild=False):
@@ -82,6 +82,30 @@ class CombinationTests(unittest.TestCase):
         self.assertFalse(can_beat(pair, low_bomb))
         self.assertTrue(can_beat(high_bomb, low_bomb))
         self.assertFalse(can_beat(low_bomb, high_bomb))
+
+    def test_ambiguous_wild_play_prefers_sequence_over_set(self):
+        previous = validate_combination((c(7), c(9), c(13, wild=True)))
+        response = validate_combination((c(10), c(12, wild=True), c(13, wild=True)))
+
+        self.assertEqual(previous.type, CombinationType.SEQUENCE)
+        self.assertEqual(previous.rank, 9)
+        self.assertEqual(response.type, CombinationType.SEQUENCE)
+        self.assertEqual(response.rank, 12)
+        self.assertTrue(can_beat(response, previous))
+
+    def test_ambiguous_wild_play_can_respond_as_set(self):
+        previous = validate_combination((c(5, Suit.CLUBS), c(5, Suit.DIAMONDS), c(12, wild=True)))
+        state = HaggisState(
+            hands=((c(6, Suit.CLUBS), c(11, wild=True), c(13, wild=True)), (c(2),)),
+            last_combination=previous,
+            last_player=1,
+            trick_cards=previous.cards,
+        )
+
+        legal = state.legal_moves()
+        matching = [move for move in legal if move.cards == state.hands[0] and not move.is_pass]
+
+        self.assertTrue(any(move.combination.type == CombinationType.SET and move.combination.rank == 6 for move in matching))
 
     def test_sequences_must_match_width_and_length_to_beat(self):
         single_run = validate_combination((c(7, Suit.CLUBS), c(8, Suit.CLUBS), c(9, Suit.CLUBS)))

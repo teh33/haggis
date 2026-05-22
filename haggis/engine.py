@@ -6,7 +6,7 @@ from collections import Counter
 from functools import lru_cache
 
 from .cards import Card, Deal, Hand, deal as deal_cards, player_wilds, point_total, standard_deck
-from .combinations import Combination, CombinationType, can_beat, validate_combination
+from .combinations import Combination, CombinationType, can_beat, possible_combinations, validate_combination
 
 
 @dataclass(frozen=True)
@@ -224,18 +224,18 @@ def _legal_moves_cached(hand: Hand, previous: Combination | None = None) -> tupl
     for cards in _candidate_card_sets(hand, previous):
         if not _could_beat_previous_by_size(cards, previous):
             continue
-        combination = validate_combination(cards)
-        if combination is None or not can_beat(combination, previous):
-            continue
-        key = (
-            tuple(cards),
-            combination.type,
-            combination.rank,
-            combination.bomb_rank,
-            combination.sequence_width,
-            combination.sequence_length,
-        )
-        moves[key] = Move(cards=tuple(cards), combination=combination)
+        for combination in possible_combinations(cards):
+            if not can_beat(combination, previous):
+                continue
+            key = (
+                tuple(cards),
+                combination.type,
+                combination.rank,
+                combination.bomb_rank,
+                combination.sequence_width,
+                combination.sequence_length,
+            )
+            moves[key] = Move(cards=tuple(cards), combination=combination)
 
     ordered = sorted(moves.values(), key=lambda move: move.combination.sort_key())
     if previous is not None:

@@ -42,30 +42,38 @@ class Combination:
 
 
 def validate_combination(cards: tuple[Card, ...] | list[Card]) -> Combination | None:
+    candidates = possible_combinations(cards)
+    return max(candidates, key=lambda combination: combination.sort_key()) if candidates else None
+
+
+def possible_combinations(cards: tuple[Card, ...] | list[Card]) -> tuple[Combination, ...]:
     ordered = tuple(sorted(cards))
     if not ordered:
-        return None
+        return ()
 
+    candidates: list[Combination] = []
     bomb_rank = bomb_rank_for(ordered)
     if bomb_rank:
-        return Combination(ordered, CombinationType.BOMB, rank=bomb_rank, bomb_rank=bomb_rank)
-
-    set_rank = set_rank_for(ordered)
-    if set_rank is not None:
-        return Combination(ordered, CombinationType.SET, rank=set_rank)
+        candidates.append(Combination(ordered, CombinationType.BOMB, rank=bomb_rank, bomb_rank=bomb_rank))
 
     sequence = sequence_shape_for(ordered)
     if sequence is not None:
         high_rank, width, length = sequence
-        return Combination(
-            ordered,
-            CombinationType.SEQUENCE,
-            rank=high_rank,
-            sequence_width=width,
-            sequence_length=length,
+        candidates.append(
+            Combination(
+                ordered,
+                CombinationType.SEQUENCE,
+                rank=high_rank,
+                sequence_width=width,
+                sequence_length=length,
+            )
         )
 
-    return None
+    set_rank = set_rank_for(ordered)
+    if set_rank is not None:
+        candidates.append(Combination(ordered, CombinationType.SET, rank=set_rank))
+
+    return tuple(candidates)
 
 
 def bomb_rank_for(cards: tuple[Card, ...]) -> int:

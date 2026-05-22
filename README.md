@@ -24,7 +24,8 @@ Implemented today:
 - self-play JSONL export with either perfect-information or player-observation records;
 - linear imitation-policy training with averaged perceptron and validation metrics;
 - an end-to-end experiment runner;
-- an interactive player-vs-CPU hand mode.
+- an interactive player-vs-CPU hand mode;
+- a local browser UI for playing a hand against the AI.
 
 ## Quick start
 
@@ -40,14 +41,24 @@ Run a fixed-hand tournament:
 python3 -m haggis.tournament --bot-a point-aware --bot-b bomb-control --hands 100 --seed 1 --output-json runs/tournament.json
 ```
 
-Run an interactive hand against the default CPU:
+Run a local browser UI against the default CPU:
+
+```bash
+python3 -m haggis.web
+```
+
+Then open <http://127.0.0.1:8765/>. The local UI lets you bet, select cards,
+play legal selections, pass when legal, and watch the CPU respond.
+
+Run an interactive terminal hand against the default CPU:
 
 ```bash
 python3 -m haggis.play --cpu policy-rollout --search-root-moves 4 --search-rollout-turns 40
 ```
 
-During your turn, enter a listed move number, `pass` when legal, exact card
-names like `3C 3D`, or `q` to quit.
+During your turn, enter exact card names like `3C 3D`, `pass` when legal, or
+`q` to quit. Type `moves` to browse a limited legal-move list or `all` to print
+every legal move.
 
 Run an official target-score game:
 

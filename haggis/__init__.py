@@ -1,6 +1,6 @@
 from .bots import BombControlBot, EndgameSearchBot, GreedySheddingBot, InformationSetRolloutBot, MonteCarloRolloutBot, PointAwareBot, PolicyBot, PolicyRolloutBot, RandomBot, TreeInformationSetBot, UCBInformationSetBot
 from .cards import Card, Deal, Rank, Suit, deal, player_wilds, point_total, standard_deck
-from .combinations import Combination, CombinationType, can_beat, validate_combination
+from .combinations import Combination, CombinationType, can_beat, possible_combinations, validate_combination
 from .engine import HaggisState, HandScore, InvariantError, InvariantReport, Move, legal_moves
 
 __all__ = [
@@ -31,6 +31,7 @@ __all__ = [
     "legal_moves",
     "player_wilds",
     "point_total",
+    "possible_combinations",
     "standard_deck",
     "validate_combination",
 ]
