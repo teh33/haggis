@@ -186,7 +186,7 @@ def _wilds_can_fill(wilds: tuple[Card, ...], slots: tuple[tuple[int, Suit], ...]
 
     wild = wilds[0]
     for index, (rank, _suit) in enumerate(slots):
-        if rank < int(wild.rank):
+        if rank <= int(wild.rank):
             remaining = slots[:index] + slots[index + 1 :]
             if _wilds_can_fill(wilds[1:], remaining):
                 return True

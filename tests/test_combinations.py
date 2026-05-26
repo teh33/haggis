@@ -83,6 +83,18 @@ class CombinationTests(unittest.TestCase):
         self.assertTrue(can_beat(high_bomb, low_bomb))
         self.assertFalse(can_beat(low_bomb, high_bomb))
 
+    def test_wild_set_must_strictly_beat_previous_rank_with_natural_cards(self):
+        previous = validate_combination((c(9, Suit.CLUBS), c(9, Suit.DIAMONDS)))
+        ten_jack = validate_combination((c(10, Suit.CLUBS), c(11, wild=True)))
+        ten_king = validate_combination((c(10, Suit.DIAMONDS), c(13, wild=True)))
+
+        self.assertEqual(ten_jack.type, CombinationType.SET)
+        self.assertEqual(ten_jack.rank, 10)
+        self.assertTrue(can_beat(ten_jack, previous))
+        self.assertEqual(ten_king.type, CombinationType.SET)
+        self.assertEqual(ten_king.rank, 10)
+        self.assertFalse(can_beat(ten_king, ten_jack))
+
     def test_ambiguous_wild_play_prefers_sequence_over_set(self):
         previous = validate_combination((c(7), c(9), c(13, wild=True)))
         response = validate_combination((c(10), c(12, wild=True), c(13, wild=True)))
@@ -106,6 +118,22 @@ class CombinationTests(unittest.TestCase):
         matching = [move for move in legal if move.cards == state.hands[0] and not move.is_pass]
 
         self.assertTrue(any(move.combination.type == CombinationType.SET and move.combination.rank == 6 for move in matching))
+
+    def test_wilds_can_fill_same_rank_sequence_slots(self):
+        previous = validate_combination((c(9, Suit.CLUBS), c(10, Suit.CLUBS), c(10, Suit.DIAMONDS), c(11, wild=True)))
+        response = validate_combination((c(10, Suit.HEARTS), c(10, Suit.SPADES), c(11, wild=True), c(12, wild=True)))
+
+        self.assertIsNotNone(previous)
+        self.assertEqual(previous.type, CombinationType.SEQUENCE)
+        self.assertEqual(previous.rank, 10)
+        self.assertEqual(previous.sequence_width, 2)
+        self.assertEqual(previous.sequence_length, 2)
+        self.assertIsNotNone(response)
+        self.assertEqual(response.type, CombinationType.SEQUENCE)
+        self.assertEqual(response.rank, 11)
+        self.assertEqual(response.sequence_width, 2)
+        self.assertEqual(response.sequence_length, 2)
+        self.assertTrue(can_beat(response, previous))
 
     def test_sequences_must_match_width_and_length_to_beat(self):
         single_run = validate_combination((c(7, Suit.CLUBS), c(8, Suit.CLUBS), c(9, Suit.CLUBS)))
