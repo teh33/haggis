@@ -1,6 +1,7 @@
 let sessionId = null;
 let state = null;
 let selected = new Set();
+let lockedCards = new Set();
 let handOrder = [];
 let draggedCardKey = null;
 let dropTarget = null;
@@ -56,6 +57,7 @@ function visibleCpuWilds(currentState) {
 
 function syncHandOrder(hand) {
   const handKeys = new Set(hand.map((card) => card.key));
+  lockedCards = new Set([...lockedCards].filter((key) => handKeys.has(key)));
   handOrder = handOrder.filter((key) => handKeys.has(key));
   for (const card of hand) {
     if (!handOrder.includes(card.key)) handOrder.push(card.key);
@@ -65,6 +67,7 @@ function syncHandOrder(hand) {
 
 async function newGame() {
   selected.clear();
+  lockedCards.clear();
   handOrder = [];
   const data = await api('/api/new', { targetScore: 350 });
   sessionId = data.sessionId;
@@ -98,6 +101,7 @@ async function nextHand() {
     alert('Finish the current hand before starting the next one.');
     return;
   }
+  lockedCards.clear();
   handOrder = [];
   const data = await api('/api/next-hand');
   state = normalizeState(data.state);
@@ -133,6 +137,7 @@ function render() {
   $('play-selected').style.display = playableSelection ? 'inline-block' : 'none';
   $('pass').style.display = playableSelection ? 'none' : 'inline-block';
   $('play-selected').disabled = !playableSelection;
+  $('lock-selected').disabled = selected.size === 0 || Boolean(state.handWinner);
   $('pass').disabled = !state.canPass || state.currentPlayer !== 'human' || Boolean(state.handWinner);
   $('move-count').textContent = state.legalMoveCount;
   $('legal-moves').innerHTML = state.legalMoves.map((move) => `<li>${escapeHtml(move.label)}</li>`).join('');
@@ -179,7 +184,7 @@ function renderHand() {
   $('human-hand').innerHTML = '';
   for (const card of orderedHumanHand()) {
     const button = document.createElement('button');
-    button.className = `card ${cardColorClass(card)} ${selected.has(card.key) ? 'selected' : ''} ${draggedCardKey === card.key ? 'dragging' : ''} ${dropClassFor(card.key)}`;
+    button.className = `card ${cardColorClass(card)} ${selected.has(card.key) ? 'selected' : ''} ${lockedCards.has(card.key) ? 'locked' : ''} ${draggedCardKey === card.key ? 'dragging' : ''} ${dropClassFor(card.key)}`;
     button.innerHTML = cardFaceHtml(card);
     button.type = 'button';
     button.draggable = true;
@@ -251,18 +256,29 @@ function moveCard(sourceKey, targetKey, side = 'before') {
 }
 
 function sortByRank() {
-  handOrder = orderedHumanHand()
-    .slice()
-    .sort((a, b) => cardRankValue(a) - cardRankValue(b) || suitValue(a) - suitValue(b) || Number(a.wild) - Number(b.wild))
-    .map((card) => card.key);
-  render();
+  sortUnlockedCards((a, b) => cardRankValue(a) - cardRankValue(b) || suitValue(a) - suitValue(b) || Number(a.wild) - Number(b.wild));
 }
 
 function sortBySuit() {
-  handOrder = orderedHumanHand()
-    .slice()
-    .sort((a, b) => suitValue(a) - suitValue(b) || cardRankValue(a) - cardRankValue(b) || Number(a.wild) - Number(b.wild))
-    .map((card) => card.key);
+  sortUnlockedCards((a, b) => suitValue(a) - suitValue(b) || cardRankValue(a) - cardRankValue(b) || Number(a.wild) - Number(b.wild));
+}
+
+function sortUnlockedCards(compareCards) {
+  const ordered = orderedHumanHand();
+  const locked = ordered.filter((card) => lockedCards.has(card.key));
+  const unlocked = ordered.filter((card) => !lockedCards.has(card.key)).sort(compareCards);
+  handOrder = [...locked, ...unlocked].map((card) => card.key);
+  render();
+}
+
+function lockSelectedCards() {
+  if (selected.size === 0) return;
+  const ordered = orderedHumanHand();
+  const newlyLocked = ordered.filter((card) => selected.has(card.key));
+  const existingLocked = ordered.filter((card) => lockedCards.has(card.key) && !selected.has(card.key));
+  const unlocked = ordered.filter((card) => !lockedCards.has(card.key) && !selected.has(card.key));
+  for (const card of newlyLocked) lockedCards.add(card.key);
+  handOrder = [...existingLocked, ...newlyLocked, ...unlocked].map((card) => card.key);
   render();
 }
 
@@ -303,6 +319,7 @@ document.addEventListener('click', async (event) => {
 $('new-game').addEventListener('click', () => newGame().catch((error) => alert(error.message)));
 $('sort-rank').addEventListener('click', sortByRank);
 $('sort-suit').addEventListener('click', sortBySuit);
+$('lock-selected').addEventListener('click', lockSelectedCards);
 $('next-hand').addEventListener('click', () => nextHand().catch((error) => alert(error.message)));
 $('play-selected').addEventListener('click', () => playSelected().catch((error) => alert(error.message)));
 $('pass').addEventListener('click', () => passTurn().catch((error) => alert(error.message)));
